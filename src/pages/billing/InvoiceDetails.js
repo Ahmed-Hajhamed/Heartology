@@ -1,27 +1,75 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
+import api from '../../services/api';
 
 const InvoiceDetails = () => {
   const { invoiceId } = useParams();
   const navigate = useNavigate();
+  const [invoice, setInvoice] = useState(null);
+  const [patientName, setPatientName] = useState('Loading...');
+  const [loading, setLoading] = useState(true);
 
-  const invoiceData = {
-    invoiceId: invoiceId,
-    patientName: 'John Doe',
-    patientId: '1',
-    issueDate: '2025-12-05',
-    status: 'pending',
-    services: [
-      { serviceName: 'Cardiology Consultation', price: 150.00 },
-      { serviceName: 'ECG Test', price: 200.00 },
-      { serviceName: 'Blood Pressure Monitoring', price: 50.00 },
-      { serviceName: 'Lab Work', price: 150.00 }
-    ],
-    totalPrice: 550.00,
-    payments: []
+  // 1. Fetch Invoice on Load
+  useEffect(() => {
+    const fetchInvoiceDetails = async () => {
+      try {
+        const response = await api.get(`/billing/invoices/${invoiceId}`);
+        const invData = response.data.data;
+        setInvoice(invData);
+
+        // 2. Fetch Patient Name
+        if (invData.patientId) {
+            try {
+                // Try fetching from patient profile first
+                const pRes = await api.get(`/patients/${invData.patientId}`);
+                const pData = pRes.data.data;
+                const name = pData.personalInfo 
+                    ? `${pData.personalInfo.firstName} ${pData.personalInfo.lastName}`
+                    : 'Unknown Patient';
+                setPatientName(name);
+            } catch (err) {
+                setPatientName('Unknown ID');
+            }
+        }
+
+      } catch (error) {
+        console.error("Error fetching invoice:", error);
+        alert("Failed to load invoice details.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchInvoiceDetails();
+  }, [invoiceId]);
+
+  // 3. Handle Payment (Simulation)
+  const handlePayment = async () => {
+      const confirmPayment = window.confirm(`Process payment of $${invoice.balanceAmount.toFixed(2)}?`);
+      if (!confirmPayment) return;
+
+      try {
+          // In a real app, this would redirect to Stripe/PayPal or open a modal
+          // For now, we update the status to 'Paid'
+          await api.put(`/billing/invoices/${invoiceId}`, {
+              status: 'Paid',
+              paidAmount: invoice.totalAmount,
+              balanceAmount: 0
+          });
+          
+          alert("Payment Processed Successfully!");
+          window.location.reload(); // Refresh to see new status
+
+      } catch (error) {
+          console.error(error);
+          alert("Payment failed.");
+      }
   };
+
+  if (loading) return <div className="page-container">Loading invoice...</div>;
+  if (!invoice) return <div className="page-container">Invoice not found.</div>;
 
   return (
     <div className="page-container">
@@ -29,82 +77,68 @@ const InvoiceDetails = () => {
         <h1>Invoice Details</h1>
         <div className="header-actions">
           <Button variant="secondary" onClick={() => navigate(-1)}>Back</Button>
-          {invoiceData.status === 'pending' && (
-            <Button onClick={() => navigate(`/billing/payment/${invoiceId}`)}>Process Payment</Button>
+          <Button onClick={() => window.print()}>Print Invoice</Button>
+          
+          {/* Only show Pay button if balance > 0 */}
+          {invoice.status !== 'Paid' && invoice.balanceAmount > 0 && (
+            <Button variant="primary" onClick={handlePayment}>
+                Process Payment
+            </Button>
           )}
-          <Button variant="secondary" onClick={() => window.print()}>Print Invoice</Button>
         </div>
       </div>
 
-      <Card title="Invoice Information">
-        <div className="info-grid">
-          <div className="info-item">
-            <label>Invoice ID:</label>
-            <span>{invoiceData.invoiceId}</span>
-          </div>
-          <div className="info-item">
-            <label>Issue Date:</label>
-            <span>{invoiceData.issueDate}</span>
-          </div>
-          <div className="info-item">
-            <label>Patient:</label>
-            <span>{invoiceData.patientName}</span>
-          </div>
-          <div className="info-item">
-            <label>Status:</label>
-            <span className={`status status-${invoiceData.status}`}>{invoiceData.status}</span>
-          </div>
-        </div>
-      </Card>
+      <div className="invoice-header-card" style={{display: 'flex', gap: '20px', marginBottom: '20px'}}>
+          <Card className="flex-1">
+              <h3>Patient Info</h3>
+              <p><strong>Name:</strong> {patientName}</p>
+              <p><strong>Patient ID:</strong> {invoice.patientId}</p>
+          </Card>
+          <Card className="flex-1">
+              <h3>Invoice Info</h3>
+              <p><strong>Invoice #:</strong> {invoice.id}</p>
+              <p><strong>Date:</strong> {new Date(invoice.invoiceDate).toLocaleDateString()}</p>
+              <p><strong>Status:</strong> <span className={`status status-${invoice.status?.toLowerCase()}`}>{invoice.status}</span></p>
+          </Card>
+      </div>
 
-      <Card title="Services">
-        <table className="invoice-table">
+      <Card title="Services & Charges">
+        <table className="table">
           <thead>
             <tr>
               <th>#</th>
-              <th>Service Name</th>
-              <th>Price</th>
+              <th>Description</th>
+              <th>Unit Price</th>
+              <th>Qty</th>
+              <th>Total</th>
             </tr>
           </thead>
           <tbody>
-            {invoiceData.services.map((service, index) => (
+            {invoice.services && invoice.services.map((item, index) => (
               <tr key={index}>
                 <td>{index + 1}</td>
-                <td>{service.serviceName}</td>
-                <td>${service.price.toFixed(2)}</td>
+                <td>{item.description}</td>
+                <td>${item.unitPrice?.toFixed(2)}</td>
+                <td>{item.quantity}</td>
+                <td>${item.total?.toFixed(2)}</td>
               </tr>
             ))}
           </tbody>
           <tfoot>
-            <tr className="total-row">
-              <td colSpan="2"><strong>Total Amount</strong></td>
-              <td><strong>${invoiceData.totalPrice.toFixed(2)}</strong></td>
+            <tr style={{borderTop: '2px solid #eee'}}>
+              <td colSpan="4" style={{textAlign: 'right', fontWeight: 'bold', paddingTop: '10px'}}>Total Amount:</td>
+              <td style={{fontWeight: 'bold', paddingTop: '10px'}}>${invoice.totalAmount?.toFixed(2)}</td>
+            </tr>
+            <tr>
+              <td colSpan="4" style={{textAlign: 'right', color: 'green'}}>Paid:</td>
+              <td style={{color: 'green'}}>${invoice.paidAmount?.toFixed(2)}</td>
+            </tr>
+            <tr>
+              <td colSpan="4" style={{textAlign: 'right', color: 'red', fontWeight: 'bold'}}>Balance Due:</td>
+              <td style={{color: 'red', fontWeight: 'bold'}}>${invoice.balanceAmount?.toFixed(2)}</td>
             </tr>
           </tfoot>
         </table>
-      </Card>
-
-      {invoiceData.payments.length > 0 && (
-        <Card title="Payment History">
-          <div className="payment-history">
-            {invoiceData.payments.map((payment, index) => (
-              <div key={index} className="payment-item">
-                <span>Payment #{payment.paymentId}</span>
-                <span>${payment.amount.toFixed(2)}</span>
-                <span>{payment.method}</span>
-                <span>{payment.paymentDate}</span>
-                <span className={`status status-${payment.status}`}>{payment.status}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-
-      <Card title="Quick Actions">
-        <div className="quick-actions">
-          <Button onClick={() => navigate(`/patients/${invoiceData.patientId}`)}>View Patient Profile</Button>
-          <Button variant="secondary" onClick={() => navigate('/billing/invoices')}>Back to Invoices</Button>
-        </div>
       </Card>
     </div>
   );

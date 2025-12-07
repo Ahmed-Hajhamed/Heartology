@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import FormField from '../../components/common/FormField';
 import Button from '../../components/common/Button';
+import api from '../../services/api'; 
 import '../../styles/pages/Auth.css';
 
 const Login = ({ setUser }) => {
@@ -19,20 +20,50 @@ const Login = ({ setUser }) => {
     });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // Mock authentication - Replace with actual API call
-    const mockUser = {
-      userId: '123',
-      name: 'Dr. John Smith',
-      email: formData.email,
-      role: 'doctor', // Can be: patient, doctor, admin, staff
-      phone: '+1234567890'
-    };
+    setError('');
 
-    setUser(mockUser);
-    navigate(`/dashboard/${mockUser.role}`);
+    try {
+      const response = await api.post('/auth/login', {
+        email: formData.email,
+        password: formData.password
+      });
+
+      if (response.data.success) {
+        const { accessToken, user } = response.data;
+
+        // Save Token & User
+        localStorage.setItem('accessToken', accessToken);
+        localStorage.setItem('user', JSON.stringify(user));
+
+        // Update Global State
+        setUser(user);
+
+        // Redirect based on Role (CORRECTED PATHS)
+        console.log('Logged in as:', user.role);
+        
+        switch(user.role) {
+          case 'doctor':
+            navigate('/dashboard/doctor'); // Correct path
+            break;
+          case 'patient':
+            navigate('/dashboard/patient'); // Correct path
+            break;
+          case 'admin':
+            navigate('/dashboard/admin'); // Correct path
+            break;
+          case 'staff':
+            navigate('/dashboard/staff'); // Correct path
+            break;
+          default:
+            navigate('/');
+        }
+      }
+    } catch (err) {
+      console.error('Login Error:', err);
+      setError(err.response?.data?.message || 'Invalid email or password');
+    }
   };
 
   return (
@@ -40,7 +71,7 @@ const Login = ({ setUser }) => {
       <h2>Login to Heartology</h2>
       <p className="auth-subtitle">Enter your credentials to access the system</p>
       
-      {error && <div className="error-alert">{error}</div>}
+      {error && <div className="error-alert" style={{color: 'red', marginBottom: '10px'}}>{error}</div>}
       
       <form onSubmit={handleSubmit}>
         <FormField

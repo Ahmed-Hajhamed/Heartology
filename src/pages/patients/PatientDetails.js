@@ -1,41 +1,39 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
+import api from '../../services/api';
 import '../../styles/pages/PatientDetails.css';
 
 const PatientDetails = () => {
   const { patientId } = useParams();
   const navigate = useNavigate();
+  const [patient, setPatient] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // Mock data
-  const patientData = {
-    patientId: patientId,
-    name: 'John Doe',
-    email: 'john@example.com',
-    phone: '+1234567890',
-    ssn: '***-**-1234',
-    birthDate: '1985-05-15',
-    gender: 'male',
-    address: '123 Main St, City, State 12345',
-    medicalProfile: {
-      bloodType: 'A+',
-      height: 175,
-      weight: 75,
-      allergies: ['Penicillin', 'Peanuts'],
-      currentMedications: ['Aspirin 75mg', 'Atorvastatin 20mg'],
-      emergencyContact: {
-        name: 'Jane Doe',
-        relationship: 'Spouse',
-        phone: '+1234567899'
+  useEffect(() => {
+    const fetchPatientDetails = async () => {
+      try {
+        const response = await api.get(`/patients/${patientId}`);
+        setPatient(response.data.data);
+      } catch (error) {
+        console.error("Error fetching patient details:", error);
+        alert("Failed to load patient details.");
+      } finally {
+        setLoading(false);
       }
-    },
-    insuranceInfo: {
-      provider: 'Blue Cross Blue Shield',
-      policyNumber: 'POL123456789',
-      groupNumber: 'GRP987654321'
-    }
-  };
+    };
+
+    fetchPatientDetails();
+  }, [patientId]);
+
+  if (loading) return <div className="page-container">Loading details...</div>;
+  if (!patient) return <div className="page-container">Patient not found.</div>;
+
+  // Helper to safely access nested data
+  const personal = patient.personalInfo || {};
+  const insurance = patient.insurance || {};
+  const emergency = patient.emergencyContact || {};
 
   return (
     <div className="page-container">
@@ -43,111 +41,93 @@ const PatientDetails = () => {
         <h1>Patient Details</h1>
         <div className="header-actions">
           <Button variant="secondary" onClick={() => navigate(-1)}>Back</Button>
-          <Button onClick={() => navigate(`/patients/${patientId}/medical-profile`)}>Edit Medical Profile</Button>
+          <Button onClick={() => navigate(`/patients/${patientId}/medical-profile`)}>Edit Profile</Button>
         </div>
       </div>
 
-      <div className="patient-details-grid">
+      <div className="details-grid">
+        {/* Personal Information */}
         <Card title="Personal Information">
           <div className="info-grid">
             <div className="info-item">
-              <label>Patient ID:</label>
-              <span>{patientData.patientId}</span>
-            </div>
-            <div className="info-item">
               <label>Full Name:</label>
-              <span>{patientData.name}</span>
+              <span>{personal.firstName} {personal.lastName}</span>
             </div>
             <div className="info-item">
               <label>Email:</label>
-              <span>{patientData.email}</span>
+              <span>{personal.email}</span>
             </div>
             <div className="info-item">
               <label>Phone:</label>
-              <span>{patientData.phone}</span>
+              <span>{personal.phone || 'N/A'}</span>
             </div>
             <div className="info-item">
               <label>SSN:</label>
-              <span>{patientData.ssn}</span>
+              <span>{patient.ssn}</span>
             </div>
-            <div className="info-item">
-              <label>Birth Date:</label>
-              <span>{patientData.birthDate}</span>
-            </div>
+            {/* Note: If address/gender/dob are missing, it's because we need to add them to the Patient Controller response. 
+                For now, we handle them gracefully. */}
             <div className="info-item">
               <label>Gender:</label>
-              <span>{patientData.gender}</span>
-            </div>
-            <div className="info-item">
-              <label>Address:</label>
-              <span>{patientData.address}</span>
+              <span>{personal.gender || 'N/A'}</span>
             </div>
           </div>
         </Card>
 
+        {/* Medical Profile */}
         <Card title="Medical Profile">
           <div className="info-grid">
             <div className="info-item">
               <label>Blood Type:</label>
-              <span className="blood-type">{patientData.medicalProfile.bloodType}</span>
+              <span className="tag tag-info">{patient.bloodType || 'N/A'}</span>
             </div>
             <div className="info-item">
-              <label>Height:</label>
-              <span>{patientData.medicalProfile.height} cm</span>
-            </div>
-            <div className="info-item">
-              <label>Weight:</label>
-              <span>{patientData.medicalProfile.weight} kg</span>
-            </div>
-            <div className="info-item full-width">
               <label>Allergies:</label>
-              <div className="tag-list">
-                {patientData.medicalProfile.allergies.map((allergy, index) => (
-                  <span key={index} className="tag tag-danger">{allergy}</span>
-                ))}
-              </div>
+              <span>{patient.allergies && patient.allergies.length > 0 ? patient.allergies.join(', ') : 'None'}</span>
             </div>
-            <div className="info-item full-width">
-              <label>Current Medications:</label>
-              <div className="tag-list">
-                {patientData.medicalProfile.currentMedications.map((med, index) => (
-                  <span key={index} className="tag tag-info">{med}</span>
-                ))}
-              </div>
+            <div className="info-item">
+              <label>Chronic Conditions:</label>
+              <span>{patient.chronicConditions && patient.chronicConditions.length > 0 ? patient.chronicConditions.join(', ') : 'None'}</span>
+            </div>
+            <div className="info-item">
+              <label>Smoking Status:</label>
+              <span>{patient.smokingStatus || 'N/A'}</span>
             </div>
           </div>
         </Card>
 
+        {/* Emergency Contact */}
         <Card title="Emergency Contact">
           <div className="info-grid">
             <div className="info-item">
               <label>Name:</label>
-              <span>{patientData.medicalProfile.emergencyContact.name}</span>
+              <span>{emergency.name || 'N/A'}</span>
             </div>
             <div className="info-item">
               <label>Relationship:</label>
-              <span>{patientData.medicalProfile.emergencyContact.relationship}</span>
+              <span>{emergency.relationship || 'N/A'}</span>
             </div>
             <div className="info-item">
               <label>Phone:</label>
-              <span>{patientData.medicalProfile.emergencyContact.phone}</span>
+              <span>{emergency.phone || 'N/A'}</span>
             </div>
           </div>
         </Card>
 
+        {/* Insurance Information */}
         <Card title="Insurance Information">
           <div className="info-grid">
             <div className="info-item">
               <label>Provider:</label>
-              <span>{patientData.insuranceInfo.provider}</span>
+              <span>{insurance.provider || 'N/A'}</span>
             </div>
             <div className="info-item">
               <label>Policy Number:</label>
-              <span>{patientData.insuranceInfo.policyNumber}</span>
+              <span>{insurance.policyNumber || 'N/A'}</span>
             </div>
             <div className="info-item">
-              <label>Group Number:</label>
-              <span>{patientData.insuranceInfo.groupNumber}</span>
+              <label>Expiry Date:</label>
+              <span>{insurance.expiryDate ? new Date(insurance.expiryDate).toLocaleDateString() : 'N/A'}</span>
             </div>
           </div>
         </Card>
@@ -155,9 +135,9 @@ const PatientDetails = () => {
 
       <Card title="Quick Actions">
         <div className="quick-actions">
-          <Button onClick={() => navigate(`/appointments/book?patientId=${patientId}`)}>Book Appointment</Button>
-          <Button variant="secondary" onClick={() => navigate(`/medical-records?patientId=${patientId}`)}>View Medical Records</Button>
-          <Button variant="secondary" onClick={() => navigate(`/billing/invoices?patientId=${patientId}`)}>View Invoices</Button>
+          <Button onClick={() => navigate(`/appointments/book?patientId=${patient.id}`)}>Book Appointment</Button>
+          <Button variant="secondary" onClick={() => navigate(`/medical-records?patientId=${patient.id}`)}>View Medical Records</Button>
+          <Button variant="secondary" onClick={() => navigate(`/billing/invoices?patientId=${patient.id}`)}>View Invoices</Button>
         </div>
       </Card>
     </div>

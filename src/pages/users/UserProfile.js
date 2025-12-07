@@ -1,175 +1,85 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import FormField from '../../components/common/FormField';
+import api from '../../services/api';
 import '../../styles/pages/UserProfile.css';
 
 const UserProfile = () => {
   const { userId } = useParams();
   const navigate = useNavigate();
-  const [isEditing, setIsEditing] = useState(false);
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // Mock user data
-  const [userData, setUserData] = useState({
-    userId: userId,
-    name: 'John Doe',
-    email: 'john@example.com',
-    phone: '+1234567890',
-    ssn: '123-45-6789',
-    role: 'patient',
-    birthDate: '1985-05-15',
-    gender: 'male',
-    address: '123 Main St, City, State 12345'
-  });
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const response = await api.get(`/users/${userId}`);
+        setUser(response.data.data);
+      } catch (error) {
+        console.error("Error fetching user:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchUser();
+  }, [userId]);
 
-  const handleChange = (e) => {
-    setUserData({
-      ...userData,
-      [e.target.name]: e.target.value
-    });
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    // Handle update logic
-    setIsEditing(false);
-    console.log('Updated user data:', userData);
-  };
+  if (loading) return <div className="page-container">Loading profile...</div>;
+  if (!user) return <div className="page-container">User not found.</div>;
 
   return (
     <div className="page-container">
       <div className="page-header">
         <h1>User Profile</h1>
-        <div className="header-actions">
-          <Button variant="secondary" onClick={() => navigate(-1)}>Back</Button>
-          {!isEditing && (
-            <Button onClick={() => setIsEditing(true)}>Edit Profile</Button>
-          )}
-        </div>
+        <Button variant="secondary" onClick={() => navigate(-1)}>Back</Button>
       </div>
 
-      <Card title="Personal Information">
-        <form onSubmit={handleSubmit}>
-          <div className="form-grid">
-            <FormField
-              label="User ID"
-              type="text"
-              name="userId"
-              value={userData.userId}
-              disabled={true}
-            />
-
-            <FormField
-              label="Role"
-              type="text"
-              name="role"
-              value={userData.role}
-              disabled={true}
-            />
-
-            <FormField
-              label="Full Name"
-              type="text"
-              name="name"
-              value={userData.name}
-              onChange={handleChange}
-              disabled={!isEditing}
-              required
-            />
-
-            <FormField
-              label="Social Security Number"
-              type="text"
-              name="ssn"
-              value={userData.ssn}
-              onChange={handleChange}
-              disabled={!isEditing}
-              required
-            />
-
-            <FormField
-              label="Email Address"
-              type="email"
-              name="email"
-              value={userData.email}
-              onChange={handleChange}
-              disabled={!isEditing}
-              required
-            />
-
-            <FormField
-              label="Phone Number"
-              type="tel"
-              name="phone"
-              value={userData.phone}
-              onChange={handleChange}
-              disabled={!isEditing}
-              required
-            />
-
-            <FormField
-              label="Birth Date"
-              type="date"
-              name="birthDate"
-              value={userData.birthDate}
-              onChange={handleChange}
-              disabled={!isEditing}
-              required
-            />
-
-            <FormField
-              label="Gender"
-              type="select"
-              name="gender"
-              value={userData.gender}
-              onChange={handleChange}
-              disabled={!isEditing}
-              options={[
-                { value: 'male', label: 'Male' },
-                { value: 'female', label: 'Female' },
-                { value: 'other', label: 'Other' }
-              ]}
-              required
-            />
-          </div>
-
-          <FormField
-            label="Address"
-            type="text"
-            name="address"
-            value={userData.address}
-            onChange={handleChange}
-            disabled={!isEditing}
-            required
-          />
-
-          {isEditing && (
-            <div className="form-actions">
-              <Button type="submit" variant="primary">Save Changes</Button>
-              <Button type="button" variant="secondary" onClick={() => setIsEditing(false)}>Cancel</Button>
+      <div className="profile-grid">
+        <Card title="Account Details">
+          <div className="info-grid">
+            <div className="info-item">
+              <label>Full Name:</label>
+              <span>{user.firstName} {user.lastName}</span>
             </div>
-          )}
-        </form>
-      </Card>
-
-      {userData.role === 'patient' && (
-        <Card title="Patient Quick Links">
-          <div className="quick-links">
-            <Button onClick={() => navigate(`/patients/${userId}`)}>View Patient Details</Button>
-            <Button variant="secondary" onClick={() => navigate(`/patients/${userId}/medical-profile`)}>Medical Profile</Button>
+            <div className="info-item">
+              <label>Email:</label>
+              <span>{user.email}</span>
+            </div>
+            <div className="info-item">
+              <label>Role:</label>
+              <span className={`tag tag-${user.role}`}>{user.role}</span>
+            </div>
+            <div className="info-item">
+              <label>Phone:</label>
+              <span>{user.phone || 'N/A'}</span>
+            </div>
+            <div className="info-item">
+              <label>Date of Birth:</label>
+              <span>{user.dateOfBirth ? new Date(user.dateOfBirth).toLocaleDateString() : 'N/A'}</span>
+            </div>
           </div>
         </Card>
-      )}
 
-      {userData.role === 'doctor' && (
-        <Card title="Doctor Quick Links">
-          <div className="quick-links">
-            <Button onClick={() => navigate(`/doctors/${userId}`)}>View Doctor Details</Button>
-            <Button variant="secondary" onClick={() => navigate(`/doctors/${userId}/schedule`)}>Manage Schedule</Button>
-          </div>
-        </Card>
-      )}
+        {/* Role Specific Actions */}
+        {user.role === 'patient' && (
+          <Card title="Patient Actions">
+            <div className="quick-links">
+               {/* We use a search/filter trick to find the patient profile linked to this user */}
+              <Button size="small" onClick={() => navigate(`/patients`)}>Go to Patient List</Button>
+            </div>
+          </Card>
+        )}
+
+        {user.role === 'doctor' && (
+          <Card title="Doctor Actions">
+            <div className="quick-links">
+              <Button size="small" onClick={() => navigate(`/doctors`)}>Go to Doctor Directory</Button>
+            </div>
+          </Card>
+        )}
+      </div>
     </div>
   );
 };

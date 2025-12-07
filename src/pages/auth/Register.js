@@ -2,20 +2,22 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import FormField from '../../components/common/FormField';
 import Button from '../../components/common/Button';
+import api from '../../services/api'; // Import your API service
 import '../../styles/pages/Auth.css';
 
 const Register = () => {
   const navigate = useNavigate();
+  const [error, setError] = useState(''); // State to show errors
   const [formData, setFormData] = useState({
     ssn: '',
     email: '',
     password: '',
     confirmPassword: '',
-    role: '',
+    role: 'patient', // Default to patient
     phone: '',
     name: '',
     birthDate: '',
-    gender: '',
+    gender: 'male',
     address: ''
   });
 
@@ -26,17 +28,65 @@ const Register = () => {
     });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Handle registration logic here
-    console.log('Registration data:', formData);
-    navigate('/login');
+    setError(''); // Clear previous errors
+
+    // 1. Basic Validation
+    if (formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    try {
+      // 2. Prepare Data for Backend
+      // The backend expects "firstName" and "lastName", but form has "name"
+      const nameParts = formData.name.split(' ');
+      const firstName = nameParts[0];
+      const lastName = nameParts.slice(1).join(' ') || '';
+
+      const payload = {
+        ssn: formData.ssn,
+        email: formData.email,
+        password: formData.password,
+        role: formData.role,
+        firstName: firstName,
+        lastName: lastName,
+        phone: formData.phone,
+        gender: formData.gender,
+        dateOfBirth: formData.birthDate,
+        // Backend expects address as an object
+        address: { 
+          street: formData.address,
+          city: '', // You can add these fields to the form later
+          country: '' 
+        }
+      };
+
+      // 3. Send to Backend
+      const response = await api.post('/auth/register', payload);
+
+      if (response.data.success) {
+        // Optional: Auto-login here if you want
+        console.log('Registration Successful:', response.data);
+        alert('Registration successful! Please login.');
+        navigate('/login');
+      }
+
+    } catch (err) {
+      console.error('Registration Error:', err);
+      // Show the exact error message from the backend (e.g. "User already exists")
+      setError(err.response?.data?.message || 'Registration failed. Please try again.');
+    }
   };
 
   return (
     <div className="auth-form register-form">
       <h2>Create New Account</h2>
       <p className="auth-subtitle">Register to access Heartology services</p>
+      
+      {/* Show Error Message */}
+      {error && <div className="alert alert-danger" style={{color: 'red', marginBottom: '1rem'}}>{error}</div>}
       
       <form onSubmit={handleSubmit}>
         <div className="form-row">
@@ -100,9 +150,9 @@ const Register = () => {
             value={formData.gender}
             onChange={handleChange}
             options={[
-              { value: 'male', label: 'Male' },
-              { value: 'female', label: 'Female' },
-              { value: 'other', label: 'Other' }
+              { value: 'Male', label: 'Male' },
+              { value: 'Female', label: 'Female' },
+              { value: 'Other', label: 'Other' }
             ]}
             required
           />

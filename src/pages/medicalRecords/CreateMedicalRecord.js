@@ -1,39 +1,121 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import FormField from '../../components/common/FormField';
+import api from '../../services/api';
 
 const CreateMedicalRecord = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [loading, setLoading] = useState(false);
+  const [doctorProfile, setDoctorProfile] = useState(null);
 
+  // Form State matching Backend Model
   const [formData, setFormData] = useState({
     patientId: '',
-    doctorId: '',
     appointmentId: '',
-    recordType: '',
-    bloodPressure: '',
+    recordType: 'Consultation',
+    // Vitals
+    systolic: '',
+    diastolic: '',
     heartRate: '',
     temperature: '',
     oxygenSaturation: '',
     respiratoryRate: '',
+    // SOAP
+    chiefComplaint: '',
     subjective: '',
+    objective: '',
     assessment: '',
+    plan: '',
+    // Diagnosis
     icd10Code: '',
-    prescriptionId: ''
+    diagnosisDesc: ''
   });
 
+  // 1. Initialize Context
+  useEffect(() => {
+    const init = async () => {
+      // Get Doctor ID
+      const user = JSON.parse(localStorage.getItem('user'));
+      if (user.role === 'doctor') {
+          try {
+            const dRes = await api.get('/doctors');
+            const myDoc = dRes.data.data.find(d => d.userId === user.id);
+            setDoctorProfile(myDoc);
+          } catch(e) { console.error(e); }
+      }
+
+      // Check URL params for auto-fill (e.g., from Appointment Details)
+      const params = new URLSearchParams(location.search);
+      const appId = params.get('appointmentId');
+      const patId = params.get('patientId');
+
+      if (appId || patId) {
+          setFormData(prev => ({
+              ...prev,
+              appointmentId: appId || '',
+              patientId: patId || ''
+          }));
+      }
+    };
+    init();
+  }, [location]);
+
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Creating medical record:', formData);
-    navigate('/medical-records');
+    setLoading(true);
+
+    try {
+      if (!doctorProfile) {
+          alert("Error: Could not identify doctor profile.");
+          return;
+      }
+
+      const payload = {
+        patientId: formData.patientId,
+        doctorId: doctorProfile.id,
+        appointmentId: formData.appointmentId || null,
+        recordType: formData.recordType,
+        vitalSigns: {
+            bloodPressure: { 
+                systolic: Number(formData.systolic), 
+                diastolic: Number(formData.diastolic) 
+            },
+            heartRate: Number(formData.heartRate),
+            temperature: Number(formData.temperature),
+            oxygenSaturation: Number(formData.oxygenSaturation),
+            respiratoryRate: Number(formData.respiratoryRate)
+        },
+        clinicalNotes: {
+            chiefComplaint: formData.chiefComplaint,
+            subjective: formData.subjective,
+            objective: formData.objective,
+            assessment: formData.assessment,
+            plan: formData.plan
+        },
+        diagnoses: formData.icd10Code ? [{
+            icd10Code: formData.icd10Code,
+            description: formData.diagnosisDesc,
+            isPrimary: true
+        }] : []
+      };
+
+      await api.post('/medical-records', payload);
+      alert('Medical Record Created Successfully!');
+      navigate('/medical-records');
+
+    } catch (error) {
+      console.error(error);
+      alert(error.response?.data?.message || 'Failed to create record');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -44,161 +126,54 @@ const CreateMedicalRecord = () => {
       </div>
 
       <form onSubmit={handleSubmit}>
-        <Card title="Basic Information">
+        <Card title="Context">
+            <div className="form-grid">
+                <FormField label="Patient ID" name="patientId" value={formData.patientId} onChange={handleChange} required />
+                <FormField label="Appointment ID" name="appointmentId" value={formData.appointmentId} onChange={handleChange} />
+                <FormField 
+                    label="Record Type" 
+                    type="select" 
+                    name="recordType" 
+                    value={formData.recordType} 
+                    onChange={handleChange}
+                    options={[
+                        { value: 'Consultation', label: 'Consultation' },
+                        { value: 'Follow-up', label: 'Follow-up' },
+                        { value: 'Emergency', label: 'Emergency' }
+                    ]} 
+                />
+            </div>
+        </Card>
+
+        <Card title="Vital Signs" className="mt-4">
           <div className="form-grid">
-            <FormField
-              label="Patient"
-              type="select"
-              name="patientId"
-              value={formData.patientId}
-              onChange={handleChange}
-              options={[
-                { value: '1', label: 'John Doe' },
-                { value: '2', label: 'Jane Smith' },
-                { value: '3', label: 'Robert Johnson' }
-              ]}
-              required
-            />
-
-            <FormField
-              label="Doctor"
-              type="select"
-              name="doctorId"
-              value={formData.doctorId}
-              onChange={handleChange}
-              options={[
-                { value: '1', label: 'Dr. Sarah Johnson' },
-                { value: '2', label: 'Dr. Michael Brown' },
-                { value: '3', label: 'Dr. Emily Davis' }
-              ]}
-              required
-            />
-
-            <FormField
-              label="Related Appointment (Optional)"
-              type="select"
-              name="appointmentId"
-              value={formData.appointmentId}
-              onChange={handleChange}
-              options={[
-                { value: '', label: 'No appointment' },
-                { value: '1', label: 'Appointment #1 - 2025-12-10' },
-                { value: '2', label: 'Appointment #2 - 2025-12-15' }
-              ]}
-            />
-
-            <FormField
-              label="Record Type"
-              type="select"
-              name="recordType"
-              value={formData.recordType}
-              onChange={handleChange}
-              options={[
-                { value: 'consultation', label: 'Consultation' },
-                { value: 'test_result', label: 'Test Result' },
-                { value: 'procedure', label: 'Procedure' },
-                { value: 'diagnosis', label: 'Diagnosis' }
-              ]}
-              required
-            />
+            <FormField label="BP Systolic" type="number" name="systolic" value={formData.systolic} onChange={handleChange} placeholder="120" />
+            <FormField label="BP Diastolic" type="number" name="diastolic" value={formData.diastolic} onChange={handleChange} placeholder="80" />
+            <FormField label="Heart Rate" type="number" name="heartRate" value={formData.heartRate} onChange={handleChange} placeholder="72" />
+            <FormField label="Temp (°C)" type="number" name="temperature" value={formData.temperature} onChange={handleChange} placeholder="36.5" />
+            <FormField label="O2 Saturation (%)" type="number" name="oxygenSaturation" value={formData.oxygenSaturation} onChange={handleChange} placeholder="98" />
           </div>
         </Card>
 
-        <Card title="Vital Signs">
-          <div className="form-grid">
-            <FormField
-              label="Blood Pressure (e.g., 120/80)"
-              type="text"
-              name="bloodPressure"
-              value={formData.bloodPressure}
-              onChange={handleChange}
-              placeholder="120/80"
-            />
-
-            <FormField
-              label="Heart Rate (bpm)"
-              type="number"
-              name="heartRate"
-              value={formData.heartRate}
-              onChange={handleChange}
-              placeholder="75"
-            />
-
-            <FormField
-              label="Temperature (°C)"
-              type="number"
-              name="temperature"
-              value={formData.temperature}
-              onChange={handleChange}
-              placeholder="36.5"
-              step="0.1"
-            />
-
-            <FormField
-              label="Oxygen Saturation (%)"
-              type="number"
-              name="oxygenSaturation"
-              value={formData.oxygenSaturation}
-              onChange={handleChange}
-              placeholder="98"
-            />
-
-            <FormField
-              label="Respiratory Rate (breaths/min)"
-              type="number"
-              name="respiratoryRate"
-              value={formData.respiratoryRate}
-              onChange={handleChange}
-              placeholder="16"
-            />
-          </div>
+        <Card title="Clinical Notes (SOAP)" className="mt-4">
+          <FormField label="Chief Complaint" name="chiefComplaint" value={formData.chiefComplaint} onChange={handleChange} required />
+          <FormField label="Subjective" type="textarea" name="subjective" value={formData.subjective} onChange={handleChange} placeholder="Patient history..." />
+          <FormField label="Objective" type="textarea" name="objective" value={formData.objective} onChange={handleChange} placeholder="Exam findings..." />
+          <FormField label="Assessment" type="textarea" name="assessment" value={formData.assessment} onChange={handleChange} placeholder="Diagnosis/Conclusion" required />
+          <FormField label="Plan" type="textarea" name="plan" value={formData.plan} onChange={handleChange} placeholder="Treatment plan..." required />
         </Card>
 
-        <Card title="Clinical Information">
-          <FormField
-            label="Subjective (Patient's Complaints)"
-            type="textarea"
-            name="subjective"
-            value={formData.subjective}
-            onChange={handleChange}
-            placeholder="Describe patient's complaints and symptoms"
-            required
-          />
-
-          <FormField
-            label="Assessment (Diagnosis)"
-            type="textarea"
-            name="assessment"
-            value={formData.assessment}
-            onChange={handleChange}
-            placeholder="Enter diagnosis and assessment"
-            required
-          />
-
-          <div className="form-grid">
-            <FormField
-              label="ICD-10 Code (Optional)"
-              type="text"
-              name="icd10Code"
-              value={formData.icd10Code}
-              onChange={handleChange}
-              placeholder="e.g., I10"
-            />
-
-            <FormField
-              label="Prescription ID (Optional)"
-              type="text"
-              name="prescriptionId"
-              value={formData.prescriptionId}
-              onChange={handleChange}
-              placeholder="Link to prescription"
-            />
-          </div>
+        <Card title="Diagnosis" className="mt-4">
+            <div className="form-grid">
+                <FormField label="ICD-10 Code" name="icd10Code" value={formData.icd10Code} onChange={handleChange} placeholder="e.g. I10" />
+                <FormField label="Description" name="diagnosisDesc" value={formData.diagnosisDesc} onChange={handleChange} placeholder="e.g. Hypertension" />
+            </div>
         </Card>
 
-        <div className="form-actions">
-          <Button type="submit" variant="primary">Create Record</Button>
-          <Button type="button" variant="secondary" onClick={() => navigate(-1)}>Cancel</Button>
+        <div className="form-actions mt-4">
+          <Button type="submit" variant="primary" disabled={loading}>
+            {loading ? 'Saving...' : 'Create Record'}
+          </Button>
         </div>
       </form>
     </div>

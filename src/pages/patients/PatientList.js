@@ -1,48 +1,56 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Card from '../../components/common/Card';
 import Table from '../../components/common/Table';
 import Button from '../../components/common/Button';
 import FormField from '../../components/common/FormField';
 import { useNavigate } from 'react-router-dom';
+import api from '../../services/api';
 import '../../styles/pages/PatientList.css';
 
 const PatientList = () => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
+  const [patients, setPatients] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const patients = [
-    { 
-      patientId: '1', 
-      name: 'John Doe', 
-      email: 'john@example.com', 
-      phone: '+1234567890', 
-      bloodType: 'A+',
-      lastVisit: '2025-11-30'
-    },
-    { 
-      patientId: '2', 
-      name: 'Jane Smith', 
-      email: 'jane@example.com', 
-      phone: '+1234567891', 
-      bloodType: 'B-',
-      lastVisit: '2025-12-01'
-    },
-    { 
-      patientId: '3', 
-      name: 'Robert Johnson', 
-      email: 'robert@example.com', 
-      phone: '+1234567892', 
-      bloodType: 'O+',
-      lastVisit: '2025-12-03'
-    },
-  ];
+  // 1. Fetch Patients on Load
+  useEffect(() => {
+    const fetchPatients = async () => {
+      try {
+        const response = await api.get('/patients');
+        
+        // 2. Map Backend Data to Table Format
+        const mappedData = response.data.data.map(p => ({
+            patientId: p.id,
+            // Access personal info from the joined user data (if backend sends it)
+            // Or fallback to top-level fields if your backend structure varies
+            name: p.personalInfo ? `${p.personalInfo.firstName} ${p.personalInfo.lastName}` : 'Unknown',
+            email: p.personalInfo?.email || 'N/A',
+            phone: p.personalInfo?.phone || 'N/A',
+            bloodType: p.bloodType || 'N/A',
+            lastVisit: p.lastVisit ? new Date(p.lastVisit).toLocaleDateString() : 'Never'
+        }));
+
+        setPatients(mappedData);
+      } catch (error) {
+        console.error("Error fetching patients:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPatients();
+  }, []);
 
   const columns = [
-    { header: 'Patient ID', accessor: 'patientId' },
     { header: 'Name', accessor: 'name' },
     { header: 'Email', accessor: 'email' },
     { header: 'Phone', accessor: 'phone' },
-    { header: 'Blood Type', accessor: 'bloodType' },
+    { 
+      header: 'Blood Type', 
+      accessor: 'bloodType',
+      render: (row) => <span className="tag tag-info">{row.bloodType}</span> 
+    },
     { header: 'Last Visit', accessor: 'lastVisit' },
     {
       header: 'Actions',
@@ -55,16 +63,19 @@ const PatientList = () => {
     }
   ];
 
+  // 3. Filter Logic (Applies to the real data)
   const filteredPatients = patients.filter(patient =>
     patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    patient.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    patient.patientId.includes(searchTerm)
+    patient.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  if (loading) return <div className="page-container">Loading patients...</div>;
 
   return (
     <div className="page-container">
       <div className="page-header">
         <h1>Patient Management</h1>
+        {/* Only Staff/Admins usually add new patients manually */}
         <Button onClick={() => navigate('/register')}>Add New Patient</Button>
       </div>
 
@@ -72,13 +83,17 @@ const PatientList = () => {
         <div className="filters">
           <FormField
             type="text"
-            placeholder="Search by name, email, or ID..."
+            placeholder="Search by name or email..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
 
-        <Table columns={columns} data={filteredPatients} />
+        {filteredPatients.length > 0 ? (
+            <Table columns={columns} data={filteredPatients} />
+        ) : (
+            <p style={{textAlign: 'center', padding: '20px'}}>No patients found.</p>
+        )}
       </Card>
     </div>
   );

@@ -134,6 +134,7 @@ function App() {
 
           {/* Patient Routes */}
           <Route path="/patients" element={<ProtectedRoute><PatientList /></ProtectedRoute>} />
+          <Route path="/patients/create" element={<ProtectedRoute allowedRoles={['patient']}><PatientMedicalProfile /></ProtectedRoute>} />
           <Route path="/patients/:patientId" element={<ProtectedRoute><PatientDetails /></ProtectedRoute>} />
           <Route path="/patients/:patientId/medical-profile" element={<ProtectedRoute><PatientMedicalProfile /></ProtectedRoute>} />
 

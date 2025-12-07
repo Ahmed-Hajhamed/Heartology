@@ -1,16 +1,34 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import FormField from '../../components/common/FormField';
+import api from '../../services/api';
 
 const CreatePrescription = () => {
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const [doctorId, setDoctorId] = useState(null);
 
   const [patientId, setPatientId] = useState('');
   const [medications, setMedications] = useState([
-    { name: '', dosage: '', frequency: '', duration: '', instructions: '' }
+    { drugName: '', dosage: '', frequency: '', duration: '', instructions: '' }
   ]);
+
+  // 1. Get Doctor ID on Load
+  useEffect(() => {
+    const fetchDoctorProfile = async () => {
+        try {
+            const user = JSON.parse(localStorage.getItem('user'));
+            const dRes = await api.get('/doctors');
+            const myProfile = dRes.data.data.find(d => d.userId === user.id);
+            if (myProfile) setDoctorId(myProfile.id);
+        } catch (e) {
+            console.error(e);
+        }
+    };
+    fetchDoctorProfile();
+  }, []);
 
   const handleMedicationChange = (index, field, value) => {
     const newMedications = [...medications];
@@ -19,17 +37,41 @@ const CreatePrescription = () => {
   };
 
   const addMedication = () => {
-    setMedications([...medications, { name: '', dosage: '', frequency: '', duration: '', instructions: '' }]);
+    setMedications([...medications, { drugName: '', dosage: '', frequency: '', duration: '', instructions: '' }]);
   };
 
   const removeMedication = (index) => {
     setMedications(medications.filter((_, i) => i !== index));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Creating prescription:', { patientId, medications });
-    navigate('/prescriptions');
+    if (!doctorId) {
+        alert("Error: Doctor profile not found.");
+        return;
+    }
+    setLoading(true);
+
+    try {
+      const payload = {
+        patientId: patientId,
+        doctorId: doctorId,
+        medications: medications,
+        refillsAllowed: 0,
+        notes: "Prescribed via Web Portal"
+      };
+
+      await api.post('/prescriptions', payload);
+      
+      alert('Prescription Created Successfully!');
+      navigate('/prescriptions');
+
+    } catch (error) {
+      console.error(error);
+      alert(error.response?.data?.message || 'Failed to create prescription');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -40,45 +82,34 @@ const CreatePrescription = () => {
       </div>
 
       <form onSubmit={handleSubmit}>
-        <Card title="Patient Information">
-          <FormField
-            label="Patient"
-            type="select"
-            value={patientId}
-            onChange={(e) => setPatientId(e.target.value)}
-            options={[
-              { value: '1', label: 'John Doe' },
-              { value: '2', label: 'Jane Smith' },
-              { value: '3', label: 'Robert Johnson' }
-            ]}
-            required
-          />
+        <Card title="Patient Details">
+            <FormField
+              label="Patient ID"
+              type="text"
+              value={patientId}
+              onChange={(e) => setPatientId(e.target.value)}
+              placeholder="Enter Patient ID"
+              required
+            />
         </Card>
 
-        <Card title="Medications">
+        <Card title="Medications" className="mt-4">
           {medications.map((medication, index) => (
-            <div key={index} className="medication-section">
-              <div className="medication-header">
-                <h4>Medication {index + 1}</h4>
+            <div key={index} className="medication-form-group" style={{ marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px solid #eee' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <h4>Medication #{index + 1}</h4>
                 {medications.length > 1 && (
-                  <Button 
-                    type="button" 
-                    variant="danger" 
-                    size="small"
-                    onClick={() => removeMedication(index)}
-                  >
-                    Remove
-                  </Button>
+                  <Button size="small" variant="danger" onClick={() => removeMedication(index)}>Remove</Button>
                 )}
               </div>
 
               <div className="form-grid">
                 <FormField
-                  label="Medication Name"
+                  label="Drug Name"
                   type="text"
-                  value={medication.name}
-                  onChange={(e) => handleMedicationChange(index, 'name', e.target.value)}
-                  placeholder="e.g., Aspirin"
+                  value={medication.drugName} // Note: Backend expects "drugName" not "name"
+                  onChange={(e) => handleMedicationChange(index, 'drugName', e.target.value)}
+                  placeholder="e.g., Amoxicillin"
                   required
                 />
 
@@ -87,16 +118,18 @@ const CreatePrescription = () => {
                   type="text"
                   value={medication.dosage}
                   onChange={(e) => handleMedicationChange(index, 'dosage', e.target.value)}
-                  placeholder="e.g., 75mg"
+                  placeholder="e.g., 500mg"
                   required
                 />
+              </div>
 
+              <div className="form-grid">
                 <FormField
                   label="Frequency"
                   type="text"
                   value={medication.frequency}
                   onChange={(e) => handleMedicationChange(index, 'frequency', e.target.value)}
-                  placeholder="e.g., Once daily"
+                  placeholder="e.g., Twice daily"
                   required
                 />
 
@@ -105,7 +138,7 @@ const CreatePrescription = () => {
                   type="text"
                   value={medication.duration}
                   onChange={(e) => handleMedicationChange(index, 'duration', e.target.value)}
-                  placeholder="e.g., 30 days"
+                  placeholder="e.g., 7 days"
                   required
                 />
               </div>
@@ -125,8 +158,10 @@ const CreatePrescription = () => {
           </Button>
         </Card>
 
-        <div className="form-actions">
-          <Button type="submit" variant="primary">Create Prescription</Button>
+        <div className="form-actions" style={{ marginTop: '20px' }}>
+          <Button type="submit" variant="primary" disabled={loading}>
+            {loading ? 'Creating...' : 'Create Prescription'}
+          </Button>
           <Button type="button" variant="secondary" onClick={() => navigate(-1)}>Cancel</Button>
         </div>
       </form>

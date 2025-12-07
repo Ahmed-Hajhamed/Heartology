@@ -1,36 +1,31 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
+import api from '../../services/api';
 
 const PrescriptionDetails = () => {
   const { prescriptionId } = useParams();
   const navigate = useNavigate();
+  const [prescription, setPrescription] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const prescriptionData = {
-    prescriptionId: prescriptionId,
-    patientName: 'John Doe',
-    patientId: '1',
-    doctorName: 'Dr. Sarah Johnson',
-    date: '2025-11-30',
-    status: 'active',
-    medications: [
-      {
-        name: 'Aspirin',
-        dosage: '75mg',
-        frequency: 'Once daily',
-        duration: '30 days',
-        instructions: 'Take with food in the morning'
-      },
-      {
-        name: 'Atorvastatin',
-        dosage: '20mg',
-        frequency: 'Once daily',
-        duration: '30 days',
-        instructions: 'Take at bedtime'
+  useEffect(() => {
+    const fetchDetails = async () => {
+      try {
+        const response = await api.get(`/prescriptions/${prescriptionId}`);
+        setPrescription(response.data.data);
+      } catch (error) {
+        console.error("Error:", error);
+      } finally {
+        setLoading(false);
       }
-    ]
-  };
+    };
+    fetchDetails();
+  }, [prescriptionId]);
+
+  if (loading) return <div className="page-container">Loading...</div>;
+  if (!prescription) return <div className="page-container">Not found.</div>;
 
   return (
     <div className="page-container">
@@ -38,69 +33,32 @@ const PrescriptionDetails = () => {
         <h1>Prescription Details</h1>
         <div className="header-actions">
           <Button variant="secondary" onClick={() => navigate(-1)}>Back</Button>
-          <Button onClick={() => window.print()}>Print Prescription</Button>
+          <Button onClick={() => window.print()}>Print</Button>
         </div>
       </div>
 
-      <Card title="Prescription Information">
-        <div className="info-grid">
-          <div className="info-item">
-            <label>Prescription ID:</label>
-            <span>{prescriptionData.prescriptionId}</span>
-          </div>
-          <div className="info-item">
-            <label>Date Issued:</label>
-            <span>{prescriptionData.date}</span>
-          </div>
-          <div className="info-item">
-            <label>Patient:</label>
-            <span>{prescriptionData.patientName}</span>
-          </div>
-          <div className="info-item">
-            <label>Prescribing Doctor:</label>
-            <span>{prescriptionData.doctorName}</span>
-          </div>
-          <div className="info-item">
-            <label>Status:</label>
-            <span className={`status status-${prescriptionData.status}`}>{prescriptionData.status}</span>
-          </div>
-        </div>
-      </Card>
+      <div className="details-grid">
+        <Card title="Info">
+            <p><strong>Date:</strong> {new Date(prescription.prescriptionDate).toLocaleDateString()}</p>
+            <p><strong>Status:</strong> {prescription.status}</p>
+            <p><strong>Patient ID:</strong> {prescription.patientId}</p>
+            <p><strong>Doctor ID:</strong> {prescription.doctorId}</p>
+        </Card>
 
-      <Card title="Medications">
-        {prescriptionData.medications.map((med, index) => (
-          <div key={index} className="medication-card">
-            <h4>{index + 1}. {med.name}</h4>
-            <div className="medication-details">
-              <div className="detail-row">
-                <label>Dosage:</label>
-                <span>{med.dosage}</span>
+        <Card title="Medications">
+          {prescription.medications && prescription.medications.map((med, index) => (
+            <div key={index} className="medication-card" style={{borderBottom: '1px solid #eee', paddingBottom: '10px', marginBottom: '10px'}}>
+              <h4>{index + 1}. {med.drugName}</h4>
+              <div className="medication-details" style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
+                <span><strong>Dosage:</strong> {med.dosage}</span>
+                <span><strong>Frequency:</strong> {med.frequency}</span>
+                <span><strong>Duration:</strong> {med.duration}</span>
+                <span><strong>Instructions:</strong> {med.instructions}</span>
               </div>
-              <div className="detail-row">
-                <label>Frequency:</label>
-                <span>{med.frequency}</span>
-              </div>
-              <div className="detail-row">
-                <label>Duration:</label>
-                <span>{med.duration}</span>
-              </div>
-              {med.instructions && (
-                <div className="detail-row">
-                  <label>Instructions:</label>
-                  <span>{med.instructions}</span>
-                </div>
-              )}
             </div>
-          </div>
-        ))}
-      </Card>
-
-      <Card title="Quick Actions">
-        <div className="quick-actions">
-          <Button onClick={() => navigate(`/patients/${prescriptionData.patientId}`)}>View Patient Profile</Button>
-          <Button variant="secondary" onClick={() => navigate('/medical-records')}>View Medical Records</Button>
-        </div>
-      </Card>
+          ))}
+        </Card>
+      </div>
     </div>
   );
 };

@@ -1,76 +1,98 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import FormField from '../../components/common/FormField';
+import api from '../../services/api';
 
 const DoctorSchedule = () => {
   const { doctorId } = useParams();
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
 
   const [scheduleData, setScheduleData] = useState({
-    workingDays: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
+    workingDays: [],
     startTime: '09:00',
-    endTime: '17:00'
+    endTime: '17:00',
+    availability: 'Available'
   });
 
   const daysOfWeek = [
-    { value: 'monday', label: 'Monday' },
-    { value: 'tuesday', label: 'Tuesday' },
-    { value: 'wednesday', label: 'Wednesday' },
-    { value: 'thursday', label: 'Thursday' },
-    { value: 'friday', label: 'Friday' },
-    { value: 'saturday', label: 'Saturday' },
-    { value: 'sunday', label: 'Sunday' }
+    { value: 'Monday', label: 'Monday' },
+    { value: 'Tuesday', label: 'Tuesday' },
+    { value: 'Wednesday', label: 'Wednesday' },
+    { value: 'Thursday', label: 'Thursday' },
+    { value: 'Friday', label: 'Friday' },
+    { value: 'Saturday', label: 'Saturday' },
+    { value: 'Sunday', label: 'Sunday' }
   ];
 
+  // 1. Fetch Existing Schedule
+  useEffect(() => {
+    const fetchSchedule = async () => {
+      try {
+        const response = await api.get(`/doctors/${doctorId}`);
+        const doc = response.data.data;
+        
+        setScheduleData({
+            workingDays: doc.workingDays || [],
+            startTime: doc.workingHours?.start || '09:00',
+            endTime: doc.workingHours?.end || '17:00',
+            availability: doc.availability || 'Available'
+        });
+      } catch (error) {
+        console.error("Error fetching schedule:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchSchedule();
+  }, [doctorId]);
+
   const handleDayToggle = (day) => {
-    setScheduleData({
-      ...scheduleData,
-      workingDays: scheduleData.workingDays.includes(day)
-        ? scheduleData.workingDays.filter(d => d !== day)
-        : [...scheduleData.workingDays, day]
-    });
+    setScheduleData(prev => ({
+      ...prev,
+      workingDays: prev.workingDays.includes(day)
+        ? prev.workingDays.filter(d => d !== day)
+        : [...prev.workingDays, day]
+    }));
   };
 
   const handleChange = (e) => {
-    setScheduleData({
-      ...scheduleData,
-      [e.target.name]: e.target.value
-    });
+    setScheduleData({ ...scheduleData, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Updated schedule:', scheduleData);
-    navigate(`/doctors/${doctorId}`);
+    try {
+        // 2. Save Schedule to Backend
+        await api.put(`/doctors/${doctorId}/schedule`, {
+            workingDays: scheduleData.workingDays,
+            workingHours: {
+                start: scheduleData.startTime,
+                end: scheduleData.endTime
+            },
+            availability: scheduleData.availability
+        });
+        alert('Schedule updated successfully!');
+        navigate(`/doctors/${doctorId}`);
+    } catch (error) {
+        console.error(error);
+        alert('Failed to update schedule.');
+    }
   };
+
+  if (loading) return <div className="page-container">Loading...</div>;
 
   return (
     <div className="page-container">
       <div className="page-header">
-        <h1>Manage Doctor Schedule</h1>
+        <h1>Manage Schedule</h1>
         <Button variant="secondary" onClick={() => navigate(-1)}>Back</Button>
       </div>
 
       <form onSubmit={handleSubmit}>
-        <Card title="Working Schedule">
-          <div className="schedule-section">
-            <label className="section-label">Working Days</label>
-            <div className="day-selector">
-              {daysOfWeek.map((day) => (
-                <label key={day.value} className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={scheduleData.workingDays.includes(day.value)}
-                    onChange={() => handleDayToggle(day.value)}
-                  />
-                  <span>{day.label}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
+        <Card title="Working Hours">
           <div className="form-grid">
             <FormField
               label="Start Time"
@@ -80,7 +102,6 @@ const DoctorSchedule = () => {
               onChange={handleChange}
               required
             />
-
             <FormField
               label="End Time"
               type="time"
@@ -89,26 +110,38 @@ const DoctorSchedule = () => {
               onChange={handleChange}
               required
             />
+             <FormField
+              label="Status"
+              type="select"
+              name="availability"
+              value={scheduleData.availability}
+              onChange={handleChange}
+              options={[
+                  { value: 'Available', label: 'Available' },
+                  { value: 'Busy', label: 'Busy' },
+                  { value: 'On Leave', label: 'On Leave' }
+              ]}
+            />
           </div>
         </Card>
 
-        <Card title="Weekly Schedule Overview">
-          <div className="weekly-overview">
-            {scheduleData.workingDays.map((day) => (
-              <div key={day} className="day-schedule">
-                <span className="day-name">{day.charAt(0).toUpperCase() + day.slice(1)}</span>
-                <span className="day-hours">{scheduleData.startTime} - {scheduleData.endTime}</span>
-              </div>
+        <Card title="Working Days">
+          <div className="days-grid" style={{display: 'flex', gap: '10px', flexWrap: 'wrap'}}>
+            {daysOfWeek.map((day) => (
+              <Button
+                key={day.value}
+                type="button"
+                variant={scheduleData.workingDays.includes(day.value) ? 'primary' : 'outline'}
+                onClick={() => handleDayToggle(day.value)}
+              >
+                {day.label}
+              </Button>
             ))}
-            {scheduleData.workingDays.length === 0 && (
-              <p className="no-schedule">No working days selected</p>
-            )}
           </div>
         </Card>
 
-        <div className="form-actions">
+        <div className="form-actions" style={{marginTop: '20px'}}>
           <Button type="submit" variant="primary">Save Schedule</Button>
-          <Button type="button" variant="secondary" onClick={() => navigate(-1)}>Cancel</Button>
         </div>
       </form>
     </div>

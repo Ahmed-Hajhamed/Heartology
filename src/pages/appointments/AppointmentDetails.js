@@ -1,39 +1,80 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Modal from '../../components/common/Modal';
+import api from '../../services/api';
 
 const AppointmentDetails = () => {
   const { appointmentId } = useParams();
   const navigate = useNavigate();
+  
+  // State for real data
+  const [appointment, setAppointment] = useState(null);
+  const [patientName, setPatientName] = useState('Loading...');
+  const [doctorName, setDoctorName] = useState('Loading...');
+  const [loading, setLoading] = useState(true);
   const [showCancelModal, setShowCancelModal] = useState(false);
 
-  const appointmentData = {
-    appointmentId: appointmentId,
-    patientName: 'John Doe',
-    patientId: '1',
-    doctorName: 'Dr. Sarah Johnson',
-    doctorId: '1',
-    scheduledDate: '2025-12-10',
-    scheduledTime: '10:00 AM',
-    duration: 30,
-    type: 'consultation',
-    status: 'scheduled',
-    reason: 'Chest pain and irregular heartbeat',
-    createdAt: '2025-12-05 14:30:00'
+  useEffect(() => {
+    const fetchDetails = async () => {
+      try {
+        // 1. Fetch Appointment Details
+        const apptRes = await api.get(`/appointments/${appointmentId}`);
+        const apptData = apptRes.data.data;
+        setAppointment(apptData);
+
+        // 2. Fetch Patient Name
+        if (apptData.patientId) {
+            try {
+                const pRes = await api.get(`/patients/${apptData.patientId}`);
+                // Patient API returns combined data usually, or we dig into personalInfo
+                const pData = pRes.data.data;
+                const name = pData.personalInfo 
+                    ? `${pData.personalInfo.firstName} ${pData.personalInfo.lastName}`
+                    : 'Unknown Patient';
+                setPatientName(name);
+            } catch (err) {
+                setPatientName('Unknown ID');
+            }
+        }
+
+        // 3. Fetch Doctor Name
+        if (apptData.doctorId) {
+            try {
+                const dRes = await api.get(`/doctors/${apptData.doctorId}`);
+                const dData = dRes.data.data;
+                setDoctorName(`Dr. ${dData.firstName} ${dData.lastName}`);
+            } catch (err) {
+                setDoctorName('Unknown Doctor');
+            }
+        }
+
+      } catch (error) {
+        console.error("Error fetching details:", error);
+        alert("Could not load appointment details.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDetails();
+  }, [appointmentId]);
+
+  const handleCancel = async () => {
+    try {
+      await api.patch(`/appointments/${appointmentId}/status`, { status: 'Cancelled' });
+      alert('Appointment cancelled successfully.');
+      setShowCancelModal(false);
+      navigate('/appointments'); // Go back to list
+    } catch (error) {
+      console.error(error);
+      alert('Failed to cancel appointment.');
+    }
   };
 
-  const handleCancel = () => {
-    console.log('Cancelling appointment:', appointmentId);
-    setShowCancelModal(false);
-    navigate('/appointments');
-  };
-
-  const handleConfirm = () => {
-    console.log('Confirming appointment:', appointmentId);
-    navigate('/appointments');
-  };
+  if (loading) return <div className="page-container">Loading details...</div>;
+  if (!appointment) return <div className="page-container">Appointment not found.</div>;
 
   return (
     <div className="page-container">
@@ -41,45 +82,34 @@ const AppointmentDetails = () => {
         <h1>Appointment Details</h1>
         <div className="header-actions">
           <Button variant="secondary" onClick={() => navigate(-1)}>Back</Button>
-          {appointmentData.status === 'scheduled' && (
-            <>
-              <Button onClick={handleConfirm}>Confirm</Button>
-              <Button variant="danger" onClick={() => setShowCancelModal(true)}>Cancel</Button>
-            </>
+          
+          {/* Only show Cancel button if it's not already cancelled or completed */}
+          {['Scheduled', 'Confirmed'].includes(appointment.status) && (
+            <Button variant="danger" onClick={() => setShowCancelModal(true)}>Cancel Appointment</Button>
           )}
         </div>
       </div>
 
       <div className="details-grid">
-        <Card title="Appointment Information">
+        <Card title="Appointment Info">
           <div className="info-grid">
             <div className="info-item">
-              <label>Appointment ID:</label>
-              <span>{appointmentData.appointmentId}</span>
-            </div>
-            <div className="info-item">
               <label>Status:</label>
-              <span className={`status status-${appointmentData.status}`}>{appointmentData.status}</span>
-            </div>
-            <div className="info-item">
-              <label>Type:</label>
-              <span className="tag tag-info">{appointmentData.type}</span>
-            </div>
-            <div className="info-item">
-              <label>Duration:</label>
-              <span>{appointmentData.duration} minutes</span>
+              <span className={`status status-${appointment.status?.toLowerCase()}`}>
+                {appointment.status}
+              </span>
             </div>
             <div className="info-item">
               <label>Date:</label>
-              <span>{appointmentData.scheduledDate}</span>
+              <span>{new Date(appointment.appointmentDate).toLocaleDateString()}</span>
             </div>
             <div className="info-item">
               <label>Time:</label>
-              <span>{appointmentData.scheduledTime}</span>
+              <span>{appointment.appointmentTime}</span>
             </div>
             <div className="info-item">
-              <label>Created At:</label>
-              <span>{appointmentData.createdAt}</span>
+              <label>Type:</label>
+              <span>{appointment.type}</span>
             </div>
           </div>
         </Card>
@@ -88,15 +118,15 @@ const AppointmentDetails = () => {
           <div className="info-grid">
             <div className="info-item">
               <label>Patient Name:</label>
-              <span>{appointmentData.patientName}</span>
+              <span>{patientName}</span>
             </div>
             <div className="info-item">
               <label>Patient ID:</label>
-              <span>{appointmentData.patientId}</span>
+              <span style={{fontSize: '0.8em', color: '#666'}}>{appointment.patientId}</span>
             </div>
           </div>
-          <Button size="small" onClick={() => navigate(`/patients/${appointmentData.patientId}`)}>
-            View Patient Profile
+          <Button size="small" onClick={() => navigate(`/patients/${appointment.patientId}/medical-profile`)}>
+            View Medical Profile
           </Button>
         </Card>
 
@@ -104,21 +134,25 @@ const AppointmentDetails = () => {
           <div className="info-grid">
             <div className="info-item">
               <label>Doctor Name:</label>
-              <span>{appointmentData.doctorName}</span>
+              <span>{doctorName}</span>
             </div>
             <div className="info-item">
               <label>Doctor ID:</label>
-              <span>{appointmentData.doctorId}</span>
+              <span style={{fontSize: '0.8em', color: '#666'}}>{appointment.doctorId}</span>
             </div>
           </div>
-          <Button size="small" onClick={() => navigate(`/doctors/${appointmentData.doctorId}`)}>
-            View Doctor Profile
-          </Button>
         </Card>
 
         <Card title="Reason for Visit">
-          <p>{appointmentData.reason}</p>
+          <p>{appointment.reasonForVisit || appointment.reason || 'No reason provided.'}</p>
         </Card>
+        
+        {/* Show Notes if they exist */}
+        {appointment.notes && (
+            <Card title="Clinical Notes">
+                <p>{appointment.notes}</p>
+            </Card>
+        )}
       </div>
 
       <Modal

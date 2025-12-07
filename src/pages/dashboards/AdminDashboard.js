@@ -1,11 +1,51 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import { useNavigate } from 'react-router-dom';
+import api from '../../services/api';
 import '../../styles/pages/Dashboard.css';
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
+  const [stats, setStats] = useState({ 
+      patients: 0, 
+      doctors: 0, 
+      appointmentsToday: 0, 
+      pendingInvoices: 0 
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchAdminData = async () => {
+      try {
+        // Run all requests in parallel for speed
+        const [patientsRes, doctorsRes, apptsRes, invoicesRes] = await Promise.all([
+            api.get('/patients'),
+            api.get('/doctors'),
+            api.get('/appointments'),
+            api.get('/billing/invoices') // or /invoices
+        ]);
+
+        const todayStr = new Date().toISOString().split('T')[0];
+        
+        setStats({
+            patients: patientsRes.data.count || patientsRes.data.data.length,
+            doctors: doctorsRes.data.count || doctorsRes.data.data.length,
+            appointmentsToday: apptsRes.data.data.filter(a => a.appointmentDate === todayStr).length,
+            pendingInvoices: invoicesRes.data.data.filter(i => i.status === 'Pending').length
+        });
+
+      } catch (error) {
+        console.error("Error loading admin data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAdminData();
+  }, []);
+
+  if (loading) return <div className="dashboard-loading">Loading system data...</div>;
 
   return (
     <div className="dashboard">
@@ -19,7 +59,7 @@ const AdminDashboard = () => {
           <div className="stat-content">
             <div className="stat-icon">👥</div>
             <div className="stat-info">
-              <h3>1,234</h3>
+              <h3>{stats.patients}</h3>
               <p>Total Patients</p>
             </div>
           </div>
@@ -29,7 +69,7 @@ const AdminDashboard = () => {
           <div className="stat-content">
             <div className="stat-icon">👨‍⚕️</div>
             <div className="stat-info">
-              <h3>45</h3>
+              <h3>{stats.doctors}</h3>
               <p>Active Doctors</p>
             </div>
           </div>
@@ -39,7 +79,7 @@ const AdminDashboard = () => {
           <div className="stat-content">
             <div className="stat-icon">📅</div>
             <div className="stat-info">
-              <h3>78</h3>
+              <h3>{stats.appointmentsToday}</h3>
               <p>Today's Appointments</p>
             </div>
           </div>
@@ -49,51 +89,8 @@ const AdminDashboard = () => {
           <div className="stat-content">
             <div className="stat-icon">💰</div>
             <div className="stat-info">
-              <h3>$45,600</h3>
-              <p>Monthly Revenue</p>
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      <div className="dashboard-content">
-        <Card title="System Statistics">
-          <div className="stats-grid">
-            <div className="stat-item">
-              <span className="stat-label">Total Users</span>
-              <span className="stat-value">1,325</span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-label">Medical Records</span>
-              <span className="stat-value">5,432</span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-label">Active Prescriptions</span>
-              <span className="stat-value">892</span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-label">Pending Invoices</span>
-              <span className="stat-value">156</span>
-            </div>
-          </div>
-        </Card>
-
-        <Card title="Recent Activity">
-          <div className="activity-list">
-            <div className="activity-item">
-              <span className="activity-icon">👤</span>
-              <span className="activity-text">New patient registered: John Doe</span>
-              <span className="activity-time">5 min ago</span>
-            </div>
-            <div className="activity-item">
-              <span className="activity-icon">📅</span>
-              <span className="activity-text">Appointment scheduled with Dr. Smith</span>
-              <span className="activity-time">15 min ago</span>
-            </div>
-            <div className="activity-item">
-              <span className="activity-icon">💰</span>
-              <span className="activity-text">Invoice #12345 paid</span>
-              <span className="activity-time">1 hour ago</span>
+              <h3>{stats.pendingInvoices}</h3>
+              <p>Pending Invoices</p>
             </div>
           </div>
         </Card>
@@ -102,7 +99,8 @@ const AdminDashboard = () => {
       <div className="quick-actions">
         <Button onClick={() => navigate('/users')}>Manage Users</Button>
         <Button variant="secondary" onClick={() => navigate('/doctors')}>Manage Doctors</Button>
-        <Button variant="secondary" onClick={() => navigate('/billing/invoices')}>View Billing</Button>
+        <Button variant="secondary" onClick={() => navigate('/billing/invoices')}>View Financials</Button>
+        <Button variant="secondary" onClick={() => navigate('/register')}>Register New Staff</Button>
       </div>
     </div>
   );

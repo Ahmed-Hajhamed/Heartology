@@ -1,59 +1,75 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Card from '../../components/common/Card';
 import Table from '../../components/common/Table';
 import Button from '../../components/common/Button';
 import FormField from '../../components/common/FormField';
 import { useNavigate } from 'react-router-dom';
+import api from '../../services/api';
 
 const InvoiceList = () => {
   const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState('');
+  const [invoices, setInvoices] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [userRole, setUserRole] = useState('');
 
-  const invoices = [
-    { 
-      invoiceId: '1', 
-      patientName: 'John Doe',
-      issueDate: '2025-12-05',
-      totalAmount: 550.00,
-      status: 'pending'
-    },
-    { 
-      invoiceId: '2', 
-      patientName: 'Jane Smith',
-      issueDate: '2025-12-03',
-      totalAmount: 320.00,
-      status: 'paid'
-    },
-    { 
-      invoiceId: '3', 
-      patientName: 'Robert Johnson',
-      issueDate: '2025-12-01',
-      totalAmount: 890.00,
-      status: 'paid'
-    },
-  ];
+  useEffect(() => {
+    const fetchInvoices = async () => {
+      try {
+        const user = JSON.parse(localStorage.getItem('user'));
+        setUserRole(user.role);
+        
+        let queryParams = '';
+
+        // 1. Role-based filtering
+        if (user.role === 'patient') {
+            const pRes = await api.get('/patients');
+            const myProfile = pRes.data.data.find(p => p.userId === user.id);
+            if (myProfile) queryParams = `?patientId=${myProfile.id}`;
+        }
+        // Staff/Admin see all by default
+
+        // 2. Fetch Data
+        // Note: Ensure your backend route is /invoices or /billing/invoices based on server.js
+        const response = await api.get(`/billing/invoices${queryParams}`);
+        
+        // 3. Map Data
+        const mappedData = response.data.data.map(inv => ({
+            invoiceId: inv.id,
+            patientName: inv.patientId, // Backend sends ID. Fetch name if needed.
+            issueDate: new Date(inv.invoiceDate).toLocaleDateString(),
+            totalAmount: inv.totalAmount,
+            status: inv.status,
+            rawDate: inv.invoiceDate
+        }));
+
+        setInvoices(mappedData);
+
+      } catch (error) {
+        console.error("Error fetching invoices:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchInvoices();
+  }, []);
 
   const columns = [
     { header: 'Invoice ID', accessor: 'invoiceId' },
-    { header: 'Patient', accessor: 'patientName' },
+    { header: 'Patient ID', accessor: 'patientName' },
     { header: 'Issue Date', accessor: 'issueDate' },
-    { 
-      header: 'Total Amount', 
-      render: (row) => `$${row.totalAmount.toFixed(2)}`
-    },
+    { header: 'Amount', render: (row) => `$${row.totalAmount.toFixed(2)}` },
     { 
       header: 'Status', 
       accessor: 'status',
-      render: (row) => <span className={`status status-${row.status}`}>{row.status}</span>
+      render: (row) => <span className={`status status-${row.status?.toLowerCase()}`}>{row.status}</span>
     },
     {
       header: 'Actions',
       render: (row) => (
         <div className="action-buttons">
           <Button size="small" onClick={() => navigate(`/billing/invoices/${row.invoiceId}`)}>View</Button>
-          {row.status === 'pending' && (
-            <Button size="small" variant="primary" onClick={() => navigate(`/billing/payment/${row.invoiceId}`)}>Pay</Button>
-          )}
         </div>
       )
     }
@@ -64,14 +80,18 @@ const InvoiceList = () => {
   );
 
   const totalPending = invoices
-    .filter(inv => inv.status === 'pending')
+    .filter(inv => inv.status === 'Pending')
     .reduce((sum, inv) => sum + inv.totalAmount, 0);
+
+  if (loading) return <div className="page-container">Loading invoices...</div>;
 
   return (
     <div className="page-container">
       <div className="page-header">
         <h1>Billing & Invoices</h1>
-        <Button onClick={() => navigate('/billing/invoices/create')}>Create New Invoice</Button>
+        {['admin', 'staff'].includes(userRole) && (
+            <Button onClick={() => navigate('/billing/invoices/create')}>Create New Invoice</Button>
+        )}
       </div>
 
       <div className="stats-row">
@@ -93,14 +113,18 @@ const InvoiceList = () => {
             onChange={(e) => setStatusFilter(e.target.value)}
             options={[
               { value: '', label: 'All Status' },
-              { value: 'pending', label: 'Pending' },
-              { value: 'paid', label: 'Paid' },
-              { value: 'cancelled', label: 'Cancelled' }
+              { value: 'Pending', label: 'Pending' },
+              { value: 'Paid', label: 'Paid' },
+              { value: 'Cancelled', label: 'Cancelled' }
             ]}
           />
         </div>
 
-        <Table columns={columns} data={filteredInvoices} />
+        {filteredInvoices.length > 0 ? (
+            <Table columns={columns} data={filteredInvoices} />
+        ) : (
+            <p style={{textAlign: 'center', padding: '20px'}}>No invoices found.</p>
+        )}
       </Card>
     </div>
   );

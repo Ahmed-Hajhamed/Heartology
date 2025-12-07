@@ -1,131 +1,92 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
+import api from '../../services/api';
 
 const MedicalRecordDetails = () => {
   const { recordId } = useParams();
   const navigate = useNavigate();
+  const [record, setRecord] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const recordData = {
-    recordId: recordId,
-    patientName: 'John Doe',
-    patientId: '1',
-    doctorName: 'Dr. Sarah Johnson',
-    doctorId: '1',
-    appointmentId: '1',
-    recordType: 'consultation',
-    date: '2025-12-05',
-    vitalSigns: {
-      bloodPressure: '120/80',
-      heartRate: 75,
-      temperature: 36.6,
-      oxygenSaturation: 98,
-      respiratoryRate: 16
-    },
-    subjective: 'Patient complains of chest pain and irregular heartbeat. Symptoms started 2 days ago.',
-    assessment: 'Possible hypertension and arrhythmia. Requires further testing.',
-    icd10Code: 'I10',
-    prescriptionId: 'RX123'
-  };
+  useEffect(() => {
+    const fetchRecord = async () => {
+      try {
+        const response = await api.get(`/medical-records/${recordId}`);
+        setRecord(response.data.data);
+      } catch (error) {
+        console.error("Error fetching record:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchRecord();
+  }, [recordId]);
+
+  if (loading) return <div className="page-container">Loading...</div>;
+  if (!record) return <div className="page-container">Record not found.</div>;
+
+  const vitals = record.vitalSigns || {};
+  const notes = record.clinicalNotes || {};
 
   return (
     <div className="page-container">
       <div className="page-header">
         <h1>Medical Record Details</h1>
-        <div className="header-actions">
-          <Button variant="secondary" onClick={() => navigate(-1)}>Back</Button>
-          <Button onClick={() => navigate(`/prescriptions/${recordData.prescriptionId}`)}>View Prescription</Button>
-        </div>
+        <Button variant="secondary" onClick={() => navigate(-1)}>Back</Button>
       </div>
 
       <div className="details-grid">
-        <Card title="Record Information">
+        <Card title="Vital Signs">
           <div className="info-grid">
             <div className="info-item">
-              <label>Record ID:</label>
-              <span>{recordData.recordId}</span>
+              <label>Blood Pressure</label>
+              <span>{vitals.bloodPressure?.systolic}/{vitals.bloodPressure?.diastolic} mmHg</span>
             </div>
             <div className="info-item">
-              <label>Type:</label>
-              <span className="tag tag-info">{recordData.recordType}</span>
+              <label>Heart Rate</label>
+              <span>{vitals.heartRate} bpm</span>
             </div>
             <div className="info-item">
-              <label>Date:</label>
-              <span>{recordData.date}</span>
+              <label>Temperature</label>
+              <span>{vitals.temperature} °C</span>
             </div>
             <div className="info-item">
-              <label>Patient:</label>
-              <span>{recordData.patientName}</span>
-            </div>
-            <div className="info-item">
-              <label>Doctor:</label>
-              <span>{recordData.doctorName}</span>
-            </div>
-            <div className="info-item">
-              <label>ICD-10 Code:</label>
-              <span className="tag tag-primary">{recordData.icd10Code}</span>
+              <label>O2 Saturation</label>
+              <span>{vitals.oxygenSaturation} %</span>
             </div>
           </div>
         </Card>
 
-        <Card title="Vital Signs">
-          <div className="vital-signs-grid">
-            <div className="vital-item">
-              <div className="vital-icon">❤️</div>
-              <div className="vital-info">
-                <label>Blood Pressure</label>
-                <span className="vital-value">{recordData.vitalSigns.bloodPressure}</span>
-              </div>
-            </div>
-            <div className="vital-item">
-              <div className="vital-icon">💓</div>
-              <div className="vital-info">
-                <label>Heart Rate</label>
-                <span className="vital-value">{recordData.vitalSigns.heartRate} bpm</span>
-              </div>
-            </div>
-            <div className="vital-item">
-              <div className="vital-icon">🌡️</div>
-              <div className="vital-info">
-                <label>Temperature</label>
-                <span className="vital-value">{recordData.vitalSigns.temperature} °C</span>
-              </div>
-            </div>
-            <div className="vital-item">
-              <div className="vital-icon">💨</div>
-              <div className="vital-info">
-                <label>Oxygen Saturation</label>
-                <span className="vital-value">{recordData.vitalSigns.oxygenSaturation}%</span>
-              </div>
-            </div>
-            <div className="vital-item">
-              <div className="vital-icon">🫁</div>
-              <div className="vital-info">
-                <label>Respiratory Rate</label>
-                <span className="vital-value">{recordData.vitalSigns.respiratoryRate} /min</span>
-              </div>
-            </div>
+        <Card title="Clinical Notes">
+          <div className="note-section" style={{marginBottom: '10px'}}>
+            <strong>Chief Complaint:</strong> <p>{notes.chiefComplaint}</p>
+          </div>
+          <div className="note-section" style={{marginBottom: '10px'}}>
+            <strong>Subjective:</strong> <p>{notes.subjective}</p>
+          </div>
+          <div className="note-section" style={{marginBottom: '10px'}}>
+            <strong>Objective:</strong> <p>{notes.objective}</p>
+          </div>
+          <div className="note-section" style={{marginBottom: '10px'}}>
+            <strong>Assessment:</strong> <p>{notes.assessment}</p>
+          </div>
+          <div className="note-section">
+            <strong>Plan:</strong> <p>{notes.plan}</p>
           </div>
         </Card>
-
-        <Card title="Subjective (Patient's Complaints)">
-          <p className="clinical-text">{recordData.subjective}</p>
-        </Card>
-
-        <Card title="Assessment (Diagnosis)">
-          <p className="clinical-text">{recordData.assessment}</p>
-        </Card>
+        
+        {record.diagnoses && record.diagnoses.length > 0 && (
+            <Card title="Diagnoses">
+                {record.diagnoses.map((d, i) => (
+                    <div key={i}>
+                        <strong>{d.icd10Code}</strong>: {d.description}
+                    </div>
+                ))}
+            </Card>
+        )}
       </div>
-
-      <Card title="Related Records">
-        <div className="quick-actions">
-          <Button onClick={() => navigate(`/patients/${recordData.patientId}`)}>View Patient Profile</Button>
-          <Button variant="secondary" onClick={() => navigate(`/doctors/${recordData.doctorId}`)}>View Doctor Profile</Button>
-          <Button variant="secondary" onClick={() => navigate(`/appointments/${recordData.appointmentId}`)}>View Appointment</Button>
-          <Button variant="secondary" onClick={() => navigate(`/icd10?code=${recordData.icd10Code}`)}>View ICD-10 Details</Button>
-        </div>
-      </Card>
     </div>
   );
 };

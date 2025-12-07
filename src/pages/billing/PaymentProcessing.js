@@ -1,37 +1,73 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import FormField from '../../components/common/FormField';
+import api from '../../services/api';
 
 const PaymentProcessing = () => {
   const { invoiceId } = useParams();
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState(false);
+  const [invoice, setInvoice] = useState(null);
 
   const [paymentData, setPaymentData] = useState({
-    amount: '550.00',
-    method: '',
+    method: 'credit_card',
     cardNumber: '',
-    cardHolder: '',
     expiryDate: '',
     cvv: ''
   });
 
-  const invoiceTotal = 550.00;
+  // 1. Fetch Invoice Amount
+  useEffect(() => {
+    const fetchInvoice = async () => {
+        try {
+            const response = await api.get(`/billing/invoices/${invoiceId}`);
+            setInvoice(response.data.data);
+        } catch (error) {
+            alert("Error loading invoice.");
+            navigate('/billing/invoices');
+        } finally {
+            setLoading(false);
+        }
+    };
+    fetchInvoice();
+  }, [invoiceId, navigate]);
 
   const handleChange = (e) => {
-    setPaymentData({
-      ...paymentData,
-      [e.target.name]: e.target.value
-    });
+    setPaymentData({ ...paymentData, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Processing payment:', paymentData);
-    alert('Payment processed successfully!');
-    navigate(`/billing/invoices/${invoiceId}`);
+    setProcessing(true);
+
+    try {
+        // 2. Process Payment (Simulate 2 second delay)
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        // 3. Update Backend Status
+        await api.put(`/billing/invoices/${invoiceId}`, {
+            status: 'Paid',
+            paidAmount: invoice.totalAmount,
+            balanceAmount: 0,
+            paymentMethod: paymentData.method,
+            paymentDate: new Date().toISOString()
+        });
+
+        alert('Payment Processed Successfully!');
+        navigate(`/billing/invoices/${invoiceId}`);
+
+    } catch (error) {
+        console.error(error);
+        alert('Payment failed. Please try again.');
+    } finally {
+        setProcessing(false);
+    }
   };
+
+  if (loading) return <div className="page-container">Loading payment details...</div>;
 
   return (
     <div className="page-container">
@@ -40,36 +76,9 @@ const PaymentProcessing = () => {
         <Button variant="secondary" onClick={() => navigate(-1)}>Back</Button>
       </div>
 
-      <div className="payment-grid">
-        <Card title="Payment Summary">
-          <div className="payment-summary">
-            <div className="summary-item">
-              <label>Invoice ID:</label>
-              <span>{invoiceId}</span>
-            </div>
-            <div className="summary-item">
-              <label>Patient:</label>
-              <span>John Doe</span>
-            </div>
-            <div className="summary-item total">
-              <label>Total Amount:</label>
-              <span className="amount">${invoiceTotal.toFixed(2)}</span>
-            </div>
-          </div>
-        </Card>
-
-        <form onSubmit={handleSubmit}>
-          <Card title="Payment Details">
-            <FormField
-              label="Payment Amount"
-              type="number"
-              name="amount"
-              value={paymentData.amount}
-              onChange={handleChange}
-              step="0.01"
-              required
-            />
-
+      <div className="payment-grid" style={{maxWidth: '600px', margin: '0 auto'}}>
+        <Card title={`Total Due: $${invoice.balanceAmount.toFixed(2)}`}>
+          <form onSubmit={handleSubmit}>
             <FormField
               label="Payment Method"
               type="select"
@@ -77,15 +86,14 @@ const PaymentProcessing = () => {
               value={paymentData.method}
               onChange={handleChange}
               options={[
-                { value: 'card', label: 'Credit/Debit Card' },
+                { value: 'credit_card', label: 'Credit Card' },
+                { value: 'debit_card', label: 'Debit Card' },
                 { value: 'cash', label: 'Cash' },
-                { value: 'insurance', label: 'Insurance' },
-                { value: 'online', label: 'Online Payment' }
+                { value: 'insurance', label: 'Insurance' }
               ]}
-              required
             />
 
-            {paymentData.method === 'card' && (
+            {['credit_card', 'debit_card'].includes(paymentData.method) && (
               <>
                 <FormField
                   label="Card Number"
@@ -93,23 +101,12 @@ const PaymentProcessing = () => {
                   name="cardNumber"
                   value={paymentData.cardNumber}
                   onChange={handleChange}
-                  placeholder="1234 5678 9012 3456"
+                  placeholder="0000 0000 0000 0000"
                   required
                 />
-
-                <FormField
-                  label="Card Holder Name"
-                  type="text"
-                  name="cardHolder"
-                  value={paymentData.cardHolder}
-                  onChange={handleChange}
-                  placeholder="John Doe"
-                  required
-                />
-
-                <div className="form-grid">
+                <div style={{display: 'flex', gap: '15px'}}>
                   <FormField
-                    label="Expiry Date"
+                    label="Expiry"
                     type="text"
                     name="expiryDate"
                     value={paymentData.expiryDate}
@@ -117,7 +114,6 @@ const PaymentProcessing = () => {
                     placeholder="MM/YY"
                     required
                   />
-
                   <FormField
                     label="CVV"
                     type="text"
@@ -131,20 +127,13 @@ const PaymentProcessing = () => {
               </>
             )}
 
-            {paymentData.method === 'insurance' && (
-              <div className="insurance-info">
-                <p>Insurance claim will be submitted to the provider on record.</p>
-                <p><strong>Provider:</strong> Blue Cross Blue Shield</p>
-                <p><strong>Policy Number:</strong> POL123456789</p>
-              </div>
-            )}
-          </Card>
-
-          <div className="form-actions">
-            <Button type="submit" variant="primary">Process Payment - ${paymentData.amount}</Button>
-            <Button type="button" variant="secondary" onClick={() => navigate(-1)}>Cancel</Button>
-          </div>
-        </form>
+            <div style={{marginTop: '20px'}}>
+                <Button type="submit" variant="primary" disabled={processing} style={{width: '100%'}}>
+                    {processing ? 'Processing...' : `Pay $${invoice.balanceAmount.toFixed(2)}`}
+                </Button>
+            </div>
+          </form>
+        </Card>
       </div>
     </div>
   );
