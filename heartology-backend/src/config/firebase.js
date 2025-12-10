@@ -1,15 +1,16 @@
 const admin = require('firebase-admin');
-const serviceAccount = require('./serviceAccountKey.json');
+const { getFirestore } = require('firebase-admin/firestore');
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
-  // If you are using Realtime Database instead of Firestore, add:
-  // databaseURL: "https://your-project-id.firebaseio.com"
-});
+// Load the service account key
+// Make sure the path matches where you saved the file
+const serviceAccount = require('../../serviceAccountKey.json');
 
-const db = admin.firestore();
-const auth = admin.auth();
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+  });
+}
 
-console.log('Firebase Admin Initialized');
+const db = getFirestore();
 
-module.exports = { db, auth };
+module.exports = { db, admin };

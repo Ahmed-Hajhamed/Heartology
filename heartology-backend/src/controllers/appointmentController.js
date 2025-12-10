@@ -58,31 +58,60 @@ const createAppointment = async (req, res) => {
   }
 };
 
-// @desc    Get appointments (Filter by Doctor, Patient, or Date)
-// @route   GET /api/appointments
-// @access  Private
 const getAppointments = async (req, res) => {
   try {
+    const { patientId, doctorId, date, status } = req.query;
     let query = db.collection('appointments');
 
-    // Filters: Allow frontend to ask for "My Appointments"
-    if (req.query.doctorId) {
-      query = query.where('doctorId', '==', req.query.doctorId);
+    // --- SECURITY ENFORCEMENT START ---
+    
+    // 1. If user is a PATIENT, they can ONLY see their own appointments
+    if (req.user.role === 'patient') {
+      // Find the Patient Profile for this User
+      const patientQuery = await db.collection('patients').where('userId', '==', req.user.id).get();
+      
+      if (patientQuery.empty) {
+        return res.status(200).json({ success: true, count: 0, data: [] }); // No profile = No appointments
+      }
+      
+      const myPatientId = patientQuery.docs[0].id;
+      
+      // FORCE the query to only show this patient's data
+      // (Even if they try to request someone else's ID in the URL, we ignore it)
+      query = query.where('patientId', '==', myPatientId);
     }
-    if (req.query.patientId) {
-      query = query.where('patientId', '==', req.query.patientId);
+
+    // 2. If user is a DOCTOR, they can ONLY see appointments assigned to them
+    else if (req.user.role === 'doctor') {
+      const doctorQuery = await db.collection('doctors').where('userId', '==', req.user.id).get();
+      
+      if (doctorQuery.empty) {
+        return res.status(200).json({ success: true, count: 0, data: [] });
+      }
+      
+      const myDoctorId = doctorQuery.docs[0].id;
+      query = query.where('doctorId', '==', myDoctorId);
     }
-    if (req.query.date) {
-      query = query.where('appointmentDate', '==', req.query.date);
+
+    // 3. Admins/Staff can filter by whatever they want (or see all)
+    else if (req.user.role === 'admin' || req.user.role === 'staff') {
+      if (patientId) query = query.where('patientId', '==', patientId);
+      if (doctorId) query = query.where('doctorId', '==', doctorId);
     }
+    
+    // --- SECURITY ENFORCEMENT END ---
+
+    // Apply common filters (Date, Status)
+    if (date) query = query.where('appointmentDate', '==', date);
+    if (status) query = query.where('status', '==', status);
 
     const snapshot = await query.get();
+    
+    // Enhance data with Patient/Doctor names
     const appointments = [];
-
-    // Manually fetch Patient and Doctor names for display
-    // This loops through results to attach "patientName" and "doctorName"
     for (const doc of snapshot.docs) {
       const appt = doc.data();
+<<<<<<< HEAD
 
       // Get Patient Name
       let patientName = 'Unknown';
@@ -107,12 +136,27 @@ const getAppointments = async (req, res) => {
       return new Date(`${a.appointmentDate}T${a.appointmentTime}`) - new Date(`${b.appointmentDate}T${b.appointmentTime}`);
     });
 
+=======
+      
+      // Optional: Fetch names for display (Makes frontend faster)
+      // You can keep this simple or expand it
+      appointments.push({ id: doc.id, ...appt });
+    }
+
+>>>>>>> origin/main
     res.status(200).json({ success: true, count: appointments.length, data: appointments });
+
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
+// ... keep createAppointment, updateAppointment, etc. ...
+
+module.exports = {
+    getAppointments,
+    // ... export others
+};
 // @desc    Get single appointment
 // @route   GET /api/appointments/:id
 const getAppointmentById = async (req, res) => {
