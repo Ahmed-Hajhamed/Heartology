@@ -1,14 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const { 
-  createAppointment, 
   getAppointments, 
+  createAppointment, 
   getAppointmentById, 
   updateAppointmentStatus 
 } = require('../controllers/appointmentController');
 const { protect } = require('../middleware/authMiddleware');
 
-router.use(protect); // Protect all routes
+// Protect ALL routes
+router.use(protect); 
 
 router.route('/')
   .get(getAppointments)
@@ -17,6 +18,7 @@ router.route('/')
 router.route('/:id')
   .get(getAppointmentById);
 
-router.patch('/:id/status', updateAppointmentStatus);
+router.route('/:id/status')
+  .patch(updateAppointmentStatus);
 
 module.exports = router;
