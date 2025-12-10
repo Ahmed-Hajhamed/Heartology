@@ -1,56 +1,52 @@
 const { db } = require('../config/firebase');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
 
-// @desc    Register a new user
+// @desc    Create User Profile (After Firebase Auth)
 // @route   POST /api/auth/register
 const register = async (req, res) => {
   try {
     const { 
-      ssn, email, password, role, firstName, lastName, 
-      phone, gender, dateOfBirth, address 
+      uid, // Firebase UID sent from frontend
+      email, 
+      role, 
+      firstName, 
+      lastName, 
+      phone, 
+      gender, 
+      dateOfBirth, 
+      address,
+      ssn 
     } = req.body;
 
-    if (!email || !password || !ssn || !role || !firstName || !lastName) {
-      return res.status(400).json({ success: false, message: 'Please provide all required fields' });
+    if (!uid || !email) {
+      return res.status(400).json({ success: false, message: 'UID and Email are required' });
     }
 
-    const userQuery = await db.collection('users').where('email', '==', email).get();
-    if (!userQuery.empty) {
-      return res.status(400).json({ success: false, message: 'User already exists' });
+    // Check if profile already exists
+    const userDoc = await db.collection('users').doc(uid).get();
+    if (userDoc.exists) {
+      return res.status(400).json({ success: false, message: 'User profile already exists' });
     }
-
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
 
     const newUser = {
-      ssn,
       email,
-      password: hashedPassword,
-      role, 
+      role: role || 'patient',
       firstName,
       lastName,
       phone: phone || '',
       gender: gender || 'Other',
       dateOfBirth: dateOfBirth || null,
-      address: address || {}, 
+      address: address || {},
+      ssn: ssn || '',
       isActive: true,
       createdAt: new Date().toISOString()
     };
 
-    const docRef = await db.collection('users').add(newUser);
-
-    const token = jwt.sign({ id: docRef.id, role: role }, process.env.JWT_SECRET, {
-      expiresIn: process.env.JWT_EXPIRE || '30d'
-    });
+    // Save using the Firebase UID as the Document ID
+    await db.collection('users').doc(uid).set(newUser);
 
     res.status(201).json({
       success: true,
-      accessToken: token,
-      user: { 
-        id: docRef.id, 
-        ...newUser 
-      }
+      user: { id: uid, ...newUser }
     });
 
   } catch (error) {
@@ -58,50 +54,29 @@ const register = async (req, res) => {
   }
 };
 
-// @desc    Login user
-// @route   POST /api/auth/login
+// @desc    Sync User (Login)
+// @route   POST /api/auth/login (or /sync)
 const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    // Ideally, the middleware 'protect' has already verified the token
+    // and attached req.user. We just return it.
+    
+    // If this endpoint is public (no protect middleware), we verify the token manually here:
+    /*
+    const token = req.body.token;
+    const decoded = await admin.auth().verifyIdToken(token);
+    const uid = decoded.uid;
+    */
 
-    if (!email || !password) {
-      return res.status(400).json({ success: false, message: 'Please provide email and password' });
-    }
+    // But let's assume you call this route WITH the token header
+    // so 'protect' middleware handles verification.
+    
+    // We just return the user data needed for the frontend
+    const user = req.user; 
 
-    const userQuery = await db.collection('users').where('email', '==', email).limit(1).get();
-
-    if (userQuery.empty) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
-    }
-
-    const userDoc = userQuery.docs[0];
-    const user = userDoc.data();
-
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
-    }
-
-    const token = jwt.sign({ id: userDoc.id, role: user.role }, process.env.JWT_SECRET, {
-      expiresIn: process.env.JWT_EXPIRE || '30d'
-    });
-
-    // --- FIXED: ADDED SSN HERE ---
     res.status(200).json({
       success: true,
-      accessToken: token,
-      user: {
-        id: userDoc.id,
-        ssn: user.ssn, // <--- THIS WAS MISSING
-        email: user.email,
-        role: user.role,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        phone: user.phone,
-        gender: user.gender,
-        dateOfBirth: user.dateOfBirth,
-        address: user.address
-      }
+      user: user
     });
 
   } catch (error) {

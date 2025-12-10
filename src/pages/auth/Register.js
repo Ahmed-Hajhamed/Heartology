@@ -1,19 +1,22 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { createUserWithEmailAndPassword } from "firebase/auth";
+import { auth } from '../../config/firebase'; // Ensure this path matches your folder structure
 import FormField from '../../components/common/FormField';
 import Button from '../../components/common/Button';
-import api from '../../services/api'; // Import your API service
+import api from '../../services/api';
 import '../../styles/pages/Auth.css';
 
 const Register = () => {
   const navigate = useNavigate();
-  const [error, setError] = useState(''); // State to show errors
+  const [error, setError] = useState('');
+  
   const [formData, setFormData] = useState({
     ssn: '',
     email: '',
     password: '',
     confirmPassword: '',
-    role: 'patient', // Default to patient
+    role: 'patient',
     phone: '',
     name: '',
     birthDate: '',
@@ -30,7 +33,7 @@ const Register = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError(''); // Clear previous errors
+    setError('');
 
     // 1. Basic Validation
     if (formData.password !== formData.confirmPassword) {
@@ -39,44 +42,46 @@ const Register = () => {
     }
 
     try {
-      // 2. Prepare Data for Backend
-      // The backend expects "firstName" and "lastName", but form has "name"
+      // 2. Create User in Firebase Authentication first
+      const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
+      const firebaseUser = userCredential.user;
+
+      // 3. Prepare Data for Backend (using Firebase UID)
       const nameParts = formData.name.split(' ');
       const firstName = nameParts[0];
       const lastName = nameParts.slice(1).join(' ') || '';
 
       const payload = {
-        ssn: formData.ssn,
+        uid: firebaseUser.uid, // CRITICAL: Send Firebase UID to backend
         email: formData.email,
-        password: formData.password,
         role: formData.role,
         firstName: firstName,
         lastName: lastName,
+        ssn: formData.ssn,
         phone: formData.phone,
         gender: formData.gender,
         dateOfBirth: formData.birthDate,
-        // Backend expects address as an object
-        address: { 
-          street: formData.address,
-          city: '', // You can add these fields to the form later
-          country: '' 
-        }
+        address: { street: formData.address }
       };
 
-      // 3. Send to Backend
-      const response = await api.post('/auth/register', payload);
+      // 4. Save Profile to Backend
+      await api.post('/auth/register', payload);
 
-      if (response.data.success) {
-        // Optional: Auto-login here if you want
-        console.log('Registration Successful:', response.data);
-        alert('Registration successful! Please login.');
-        navigate('/login');
-      }
+      // 5. Auto Login (Get Token)
+      const token = await firebaseUser.getIdToken();
+      localStorage.setItem('accessToken', token);
+      
+      alert("Registration Successful!");
+      navigate('/login');
 
     } catch (err) {
-      console.error('Registration Error:', err);
-      // Show the exact error message from the backend (e.g. "User already exists")
-      setError(err.response?.data?.message || 'Registration failed. Please try again.');
+      console.error(err);
+      // specific error handling for firebase or backend
+      if (err.code === 'auth/email-already-in-use') {
+        setError('That email is already registered.');
+      } else {
+        setError(err.response?.data?.message || err.message || 'Registration failed');
+      }
     }
   };
 
@@ -85,8 +90,7 @@ const Register = () => {
       <h2>Create New Account</h2>
       <p className="auth-subtitle">Register to access Heartology services</p>
       
-      {/* Show Error Message */}
-      {error && <div className="alert alert-danger" style={{color: 'red', marginBottom: '1rem'}}>{error}</div>}
+      {error && <div className="error-alert" style={{color: 'red', marginBottom: '1rem'}}>{error}</div>}
       
       <form onSubmit={handleSubmit}>
         <div className="form-row">
@@ -150,9 +154,9 @@ const Register = () => {
             value={formData.gender}
             onChange={handleChange}
             options={[
-              { value: 'Male', label: 'Male' },
-              { value: 'Female', label: 'Female' },
-              { value: 'Other', label: 'Other' }
+              { value: 'male', label: 'Male' },
+              { value: 'female', label: 'Female' },
+              { value: 'other', label: 'Other' }
             ]}
             required
           />

@@ -1,5 +1,4 @@
-const jwt = require('jsonwebtoken');
-const { db } = require('../config/firebase');
+const { admin, db } = require('../config/firebase');
 
 const protect = async (req, res, next) => {
   let token;
@@ -9,27 +8,36 @@ const protect = async (req, res, next) => {
       // Get token from header
       token = req.headers.authorization.split(' ')[1];
 
-      // Verify token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-      // Get user from Firestore
-      const userDoc = await db.collection('users').doc(decoded.id).get();
+      // 1. Verify Token with Firebase Admin
+      const decodedToken = await admin.auth().verifyIdToken(token);
+      
+      // 2. Get User from Firestore using the Firebase UID
+      // Note: We now assume the Firestore Document ID is the same as the Firebase UID
+      const userDoc = await db.collection('users').doc(decodedToken.uid).get();
 
       if (!userDoc.exists) {
-        return res.status(401).json({ success: false, message: 'Not authorized, user not found' });
+        return res.status(401).json({ success: false, message: 'User profile not found' });
       }
 
+      // Attach user info to request
       req.user = { id: userDoc.id, ...userDoc.data() };
       next();
-    } catch (error) {
-      console.error(error);
-      res.status(401).json({ success: false, message: 'Not authorized, token failed' });
-    }
-  }
 
-  if (!token) {
+    } catch (error) {
+      console.error("Auth Middleware Error:", error);
+      res.status(401).json({ success: false, message: 'Not authorized, invalid token' });
+    }
+  } else {
     res.status(401).json({ success: false, message: 'Not authorized, no token' });
   }
 };
 
-module.exports = { protect };
+const adminOnly = (req, res, next) => {
+  if (req.user && (req.user.role === 'admin' || req.user.role === 'staff')) {
+    next();
+  } else {
+    res.status(403).json({ success: false, message: 'Admin access required' });
+  }
+};
+
+module.exports = { protect, adminOnly };

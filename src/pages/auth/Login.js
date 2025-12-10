@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth } from '../../config/firebase';
 import FormField from '../../components/common/FormField';
 import Button from '../../components/common/Button';
-import api from '../../services/api'; 
+import api from '../../services/api';
 import '../../styles/pages/Auth.css';
 
 const Login = ({ setUser }) => {
@@ -25,44 +27,56 @@ const Login = ({ setUser }) => {
     setError('');
 
     try {
-      const response = await api.post('/auth/login', {
-        email: formData.email,
-        password: formData.password
+      // 1. Firebase Login
+      const userCredential = await signInWithEmailAndPassword(auth, formData.email, formData.password);
+      const user = userCredential.user;
+
+      // 2. Get JWT Token
+      const token = await user.getIdToken();
+      localStorage.setItem('accessToken', token);
+
+      // 3. Call Backend to get Role and Profile Data
+      // We send a request to /auth/login with the token header
+      const response = await api.post('/auth/login', {}, {
+          headers: { Authorization: `Bearer ${token}` }
       });
 
       if (response.data.success) {
-        const { accessToken, user } = response.data;
+          const dbUser = response.data.user;
+          
+          // Save User Data
+          localStorage.setItem('user', JSON.stringify(dbUser));
+          
+          // Update Global State
+          if (setUser) setUser(dbUser);
 
-        // Save Token & User
-        localStorage.setItem('accessToken', accessToken);
-        localStorage.setItem('user', JSON.stringify(user));
-
-        // Update Global State
-        setUser(user);
-
-        // Redirect based on Role (CORRECTED PATHS)
-        console.log('Logged in as:', user.role);
-        
-        switch(user.role) {
-          case 'doctor':
-            navigate('/dashboard/doctor'); // Correct path
-            break;
-          case 'patient':
-            navigate('/dashboard/patient'); // Correct path
-            break;
-          case 'admin':
-            navigate('/dashboard/admin'); // Correct path
-            break;
-          case 'staff':
-            navigate('/dashboard/staff'); // Correct path
-            break;
-          default:
-            navigate('/');
-        }
+          // Redirect based on role
+          console.log('Logged in as:', dbUser.role);
+          switch(dbUser.role) {
+            case 'doctor':
+              navigate('/dashboard/doctor');
+              break;
+            case 'patient':
+              navigate('/dashboard/patient');
+              break;
+            case 'admin':
+              navigate('/dashboard/admin');
+              break;
+            case 'staff':
+              navigate('/dashboard/staff');
+              break;
+            default:
+              navigate('/');
+          }
       }
     } catch (err) {
       console.error('Login Error:', err);
-      setError(err.response?.data?.message || 'Invalid email or password');
+      // Handle Firebase specific errors
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
+        setError('Invalid email or password');
+      } else {
+        setError('Login failed. Please try again.');
+      }
     }
   };
 
