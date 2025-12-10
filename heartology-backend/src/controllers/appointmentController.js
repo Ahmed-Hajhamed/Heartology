@@ -5,9 +5,9 @@ const { db } = require('../config/firebase');
 // @access  Private
 const createAppointment = async (req, res) => {
   try {
-    const { 
-      patientId, doctorId, appointmentDate, appointmentTime, 
-      type, reasonForVisit, notes 
+    const {
+      patientId, doctorId, appointmentDate, appointmentTime,
+      type, reasonForVisit, notes
     } = req.body;
 
     // 1. Validate Input
@@ -83,15 +83,15 @@ const getAppointments = async (req, res) => {
     // This loops through results to attach "patientName" and "doctorName"
     for (const doc of snapshot.docs) {
       const appt = doc.data();
-      
+
       // Get Patient Name
       let patientName = 'Unknown';
       if (appt.patientId) {
         const pDoc = await db.collection('patients').doc(appt.patientId).get();
         if (pDoc.exists) {
-            // We need to jump to the User collection to get the name
-            const uDoc = await db.collection('users').doc(pDoc.data().userId).get();
-            if (uDoc.exists) patientName = `${uDoc.data().firstName} ${uDoc.data().lastName}`;
+          // We need to jump to the User collection to get the name
+          const uDoc = await db.collection('users').doc(pDoc.data().userId).get();
+          if (uDoc.exists) patientName = `${uDoc.data().firstName} ${uDoc.data().lastName}`;
         }
       }
 
@@ -104,7 +104,7 @@ const getAppointments = async (req, res) => {
 
     // Sort by Date/Time (Javascript sort since Firestore sorting has limitations with multiple filters)
     appointments.sort((a, b) => {
-        return new Date(`${a.appointmentDate}T${a.appointmentTime}`) - new Date(`${b.appointmentDate}T${b.appointmentTime}`);
+      return new Date(`${a.appointmentDate}T${a.appointmentTime}`) - new Date(`${b.appointmentDate}T${b.appointmentTime}`);
     });
 
     res.status(200).json({ success: true, count: appointments.length, data: appointments });
@@ -130,11 +130,71 @@ const getAppointmentById = async (req, res) => {
 const updateAppointmentStatus = async (req, res) => {
   try {
     const { status } = req.body; // 'Confirmed', 'Completed', 'Cancelled', 'No Show'
-    
-    await db.collection('appointments').doc(req.params.id).update({
+    const appointmentId = req.params.id;
+
+    // Get the appointment data first
+    const appointmentDoc = await db.collection('appointments').doc(appointmentId).get();
+    if (!appointmentDoc.exists) {
+      return res.status(404).json({ success: false, message: 'Appointment not found' });
+    }
+    const appointment = appointmentDoc.data();
+
+    // Update the appointment status
+    await db.collection('appointments').doc(appointmentId).update({
       status,
       updatedAt: new Date().toISOString()
     });
+
+    // AUTO-BILLING: Create invoice when appointment is completed
+    if (status === 'Completed') {
+      // Check if invoice already exists for this appointment
+      const existingInvoice = await db.collection('invoices')
+        .where('appointmentId', '==', appointmentId)
+        .get();
+
+      if (existingInvoice.empty) {
+        // Get doctor's consultation fee
+        let consultationFee = 500; // Default fee
+        if (appointment.doctorId) {
+          const doctorDoc = await db.collection('doctors').doc(appointment.doctorId).get();
+          if (doctorDoc.exists) {
+            consultationFee = doctorDoc.data().consultationFee || 500;
+          }
+        }
+
+        // Create invoice items based on appointment type
+        const items = [
+          { description: `${appointment.type || 'Consultation'} Fee`, amount: consultationFee }
+        ];
+
+        // Create the invoice
+        const newInvoice = {
+          patientId: appointment.patientId,
+          appointmentId: appointmentId,
+          items: items,
+          totalAmount: consultationFee,
+          paidAmount: 0,
+          balanceAmount: consultationFee,
+          status: 'Pending',
+          paymentMethod: null,
+          paidAt: null,
+          dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days from now
+          invoiceNumber: `INV-${Date.now()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`,
+          invoiceDate: new Date().toISOString().split('T')[0],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+
+        await db.collection('invoices').add(newInvoice);
+
+        return res.status(200).json({
+          success: true,
+          message: `Appointment completed. Invoice generated for ${consultationFee} EGP.`,
+          invoiceGenerated: true,
+          invoiceAmount: consultationFee
+        });
+      }
+    }
 
     res.status(200).json({ success: true, message: `Appointment status updated to ${status}` });
   } catch (error) {

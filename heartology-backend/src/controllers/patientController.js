@@ -7,9 +7,9 @@ const createPatient = async (req, res) => {
   try {
     // We expect the request to contain the userId (link to the login account)
     // and the medical profile details
-    const { 
-      userId, ssn, bloodType, allergies, chronicConditions, 
-      currentMedications, insurance, emergencyContact 
+    const {
+      userId, ssn, bloodType, allergies, chronicConditions,
+      currentMedications, insurance, emergencyContact
     } = req.body;
 
     // 1. Basic Validation
@@ -35,7 +35,7 @@ const createPatient = async (req, res) => {
       smokingStatus: req.body.smokingStatus || 'Never',
       alcoholConsumption: req.body.alcoholConsumption || 'None',
       exerciseFrequency: req.body.exerciseFrequency || '',
-      
+
       // Nested Objects
       insurance: insurance || {
         provider: '',
@@ -73,18 +73,47 @@ const getPatients = async (req, res) => {
   try {
     const snapshot = await db.collection('patients').get();
     const patients = [];
-    
-    // Optional: We could manually fetch the "User" details (Name, Email) for each patient here
-    // But for now, we just return the patient profiles
-    snapshot.forEach(doc => {
-      patients.push({ id: doc.id, ...doc.data() });
-    });
+
+    // Fetch the "User" details (Name, Email, Phone) for each patient
+    for (const doc of snapshot.docs) {
+      const patientData = doc.data();
+
+      // Lookup user data
+      let personalInfo = {
+        firstName: 'Unknown',
+        lastName: '',
+        email: 'N/A',
+        phone: 'N/A'
+      };
+
+      if (patientData.userId) {
+        const userDoc = await db.collection('users').doc(patientData.userId).get();
+        if (userDoc.exists) {
+          const userData = userDoc.data();
+          personalInfo = {
+            firstName: userData.firstName || 'Unknown',
+            lastName: userData.lastName || '',
+            email: userData.email || 'N/A',
+            phone: userData.phone || 'N/A',
+            gender: userData.gender,
+            dateOfBirth: userData.dateOfBirth
+          };
+        }
+      }
+
+      patients.push({
+        id: doc.id,
+        ...patientData,
+        personalInfo
+      });
+    }
 
     res.status(200).json({ success: true, count: patients.length, data: patients });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
 
 // @desc    Get single patient by ID
 // @route   GET /api/patients/:id
@@ -100,25 +129,25 @@ const getPatientById = async (req, res) => {
     const patientData = doc.data();
 
     // Fetch the associated User data (Name, Email) to return a complete profile
-const userDoc = await db.collection('users').doc(patientData.userId).get();
+    const userDoc = await db.collection('users').doc(patientData.userId).get();
     const userData = userDoc.exists ? userDoc.data() : {};
 
-    res.status(200).json({ 
-      success: true, 
-      data: { 
-        id: doc.id, 
+    res.status(200).json({
+      success: true,
+      data: {
+        id: doc.id,
         ...patientData,
-        personalInfo: { 
-            firstName: userData.firstName,
-            lastName: userData.lastName,
-            email: userData.email,
-            phone: userData.phone,
-            // ADD THESE LINES:
-            gender: userData.gender,
-            dateOfBirth: userData.dateOfBirth,
-            address: userData.address
+        personalInfo: {
+          firstName: userData.firstName,
+          lastName: userData.lastName,
+          email: userData.email,
+          phone: userData.phone,
+          // ADD THESE LINES:
+          gender: userData.gender,
+          dateOfBirth: userData.dateOfBirth,
+          address: userData.address
         }
-      } 
+      }
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -139,10 +168,10 @@ const updatePatient = async (req, res) => {
 
     // Update with whatever data is sent in body
     const updates = {
-        ...req.body,
-        updatedAt: new Date().toISOString()
+      ...req.body,
+      updatedAt: new Date().toISOString()
     };
-    
+
     // Prevent updating critical fields if necessary (like ssn or userId)
     // delete updates.ssn; 
 

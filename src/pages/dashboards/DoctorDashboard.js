@@ -12,7 +12,7 @@ const DoctorDashboard = () => {
   const [doctorProfile, setDoctorProfile] = useState(null);
   const [appointments, setAppointments] = useState([]);
   const [stats, setStats] = useState({ today: 0, pending: 0, totalPatients: 0 });
-  
+
   // Onboarding State
   const [onboardingData, setOnboardingData] = useState({
     specialization: 'Cardiology',
@@ -24,7 +24,7 @@ const DoctorDashboard = () => {
     const fetchDashboardData = async () => {
       try {
         const user = JSON.parse(localStorage.getItem('user'));
-        
+
         // 1. Check for Doctor Profile
         const docRes = await api.get('/doctors');
         const myProfile = docRes.data.data.find(d => d.userId === user.id);
@@ -35,15 +35,18 @@ const DoctorDashboard = () => {
           // 2. Fetch Appointments for this Doctor
           const apptRes = await api.get(`/appointments?doctorId=${myProfile.id}`);
           const myAppts = apptRes.data.data;
-          
-          // Filter for "Today" (Simple check)
+
+          // Filter for "Today" - only active appointments (Scheduled or Confirmed)
           const todayStr = new Date().toISOString().split('T')[0];
-          const todayAppts = myAppts.filter(a => a.appointmentDate === todayStr);
+          const todayAppts = myAppts.filter(a =>
+            a.appointmentDate === todayStr &&
+            ['Scheduled', 'Confirmed'].includes(a.status)
+          );
 
           setAppointments(todayAppts);
           setStats({
             today: todayAppts.length,
-            pending: myAppts.filter(a => a.status === 'Scheduled').length,
+            pending: myAppts.filter(a => a.status === 'Scheduled' || a.status === 'Confirmed').length,
             totalPatients: new Set(myAppts.map(a => a.patientId)).size
           });
         }
@@ -72,9 +75,9 @@ const DoctorDashboard = () => {
         workingDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
         workingHours: { start: "09:00", end: "17:00" }
       });
-      
+
       alert("Profile Created! Reloading...");
-      window.location.reload(); 
+      window.location.reload();
     } catch (error) {
       alert(error.response?.data?.message || "Failed to create profile");
     }
@@ -168,7 +171,7 @@ const DoctorDashboard = () => {
         <Card title="Today's Schedule">
           <div className="appointment-list">
             {appointments.length === 0 ? (
-              <p style={{padding: '20px', color: '#666'}}>No appointments scheduled for today.</p>
+              <p style={{ padding: '20px', color: '#666' }}>No appointments scheduled for today.</p>
             ) : (
               appointments.map(apt => (
                 <div key={apt.id} className="appointment-item">

@@ -7,11 +7,11 @@ import '../../styles/pages/Dashboard.css';
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
-  const [stats, setStats] = useState({ 
-      patients: 0, 
-      doctors: 0, 
-      appointmentsToday: 0, 
-      pendingInvoices: 0 
+  const [stats, setStats] = useState({
+    patients: 0,
+    doctors: 0,
+    appointmentsToday: 0,
+    pendingInvoices: 0
   });
   const [loading, setLoading] = useState(true);
 
@@ -20,19 +20,25 @@ const AdminDashboard = () => {
       try {
         // Run all requests in parallel for speed
         const [patientsRes, doctorsRes, apptsRes, invoicesRes] = await Promise.all([
-            api.get('/patients'),
-            api.get('/doctors'),
-            api.get('/appointments'),
-            api.get('/billing/invoices') // or /invoices
+          api.get('/patients'),
+          api.get('/doctors'),
+          api.get('/appointments'),
+          api.get('/billing/invoices') // or /invoices
         ]);
 
         const todayStr = new Date().toISOString().split('T')[0];
-        
+
+        // Only count active appointments (Scheduled or Confirmed) for today
+        const todayActiveAppts = apptsRes.data.data.filter(a =>
+          a.appointmentDate === todayStr &&
+          ['Scheduled', 'Confirmed'].includes(a.status)
+        );
+
         setStats({
-            patients: patientsRes.data.count || patientsRes.data.data.length,
-            doctors: doctorsRes.data.count || doctorsRes.data.data.length,
-            appointmentsToday: apptsRes.data.data.filter(a => a.appointmentDate === todayStr).length,
-            pendingInvoices: invoicesRes.data.data.filter(i => i.status === 'Pending').length
+          patients: patientsRes.data.count || patientsRes.data.data.length,
+          doctors: doctorsRes.data.count || doctorsRes.data.data.length,
+          appointmentsToday: todayActiveAppts.length,
+          pendingInvoices: invoicesRes.data.data.filter(i => i.status === 'Pending').length
         });
 
       } catch (error) {

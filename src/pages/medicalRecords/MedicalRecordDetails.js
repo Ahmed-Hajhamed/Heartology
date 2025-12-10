@@ -28,7 +28,21 @@ const MedicalRecordDetails = () => {
   if (!record) return <div className="page-container">Record not found.</div>;
 
   const vitals = record.vitalSigns || {};
-  const notes = record.clinicalNotes || {};
+  // Support both nested clinicalNotes and flat structure
+  const notes = record.clinicalNotes || {
+    chiefComplaint: record.chiefComplaint,
+    subjective: record.subjective,
+    objective: record.objective,
+    assessment: record.assessment,
+    plan: record.plan
+  };
+
+  // Handle blood pressure as string "120/80" or object {systolic, diastolic}
+  const formatBloodPressure = () => {
+    if (!vitals.bloodPressure) return '/ mmHg';
+    if (typeof vitals.bloodPressure === 'string') return `${vitals.bloodPressure} mmHg`;
+    return `${vitals.bloodPressure.systolic}/${vitals.bloodPressure.diastolic} mmHg`;
+  };
 
   return (
     <div className="page-container">
@@ -42,7 +56,7 @@ const MedicalRecordDetails = () => {
           <div className="info-grid">
             <div className="info-item">
               <label>Blood Pressure</label>
-              <span>{vitals.bloodPressure?.systolic}/{vitals.bloodPressure?.diastolic} mmHg</span>
+              <span>{formatBloodPressure()}</span>
             </div>
             <div className="info-item">
               <label>Heart Rate</label>
@@ -60,31 +74,31 @@ const MedicalRecordDetails = () => {
         </Card>
 
         <Card title="Clinical Notes">
-          <div className="note-section" style={{marginBottom: '10px'}}>
-            <strong>Chief Complaint:</strong> <p>{notes.chiefComplaint}</p>
+          <div className="note-section" style={{ marginBottom: '10px' }}>
+            <strong>Chief Complaint:</strong> <p>{notes.chiefComplaint || 'N/A'}</p>
           </div>
-          <div className="note-section" style={{marginBottom: '10px'}}>
-            <strong>Subjective:</strong> <p>{notes.subjective}</p>
+          <div className="note-section" style={{ marginBottom: '10px' }}>
+            <strong>Subjective:</strong> <p>{notes.subjective || 'N/A'}</p>
           </div>
-          <div className="note-section" style={{marginBottom: '10px'}}>
-            <strong>Objective:</strong> <p>{notes.objective}</p>
+          <div className="note-section" style={{ marginBottom: '10px' }}>
+            <strong>Objective:</strong> <p>{notes.objective || 'N/A'}</p>
           </div>
-          <div className="note-section" style={{marginBottom: '10px'}}>
-            <strong>Assessment:</strong> <p>{notes.assessment}</p>
+          <div className="note-section" style={{ marginBottom: '10px' }}>
+            <strong>Assessment:</strong> <p>{notes.assessment || 'N/A'}</p>
           </div>
           <div className="note-section">
-            <strong>Plan:</strong> <p>{notes.plan}</p>
+            <strong>Plan:</strong> <p>{notes.plan || 'N/A'}</p>
           </div>
         </Card>
-        
+
         {record.diagnoses && record.diagnoses.length > 0 && (
-            <Card title="Diagnoses">
-                {record.diagnoses.map((d, i) => (
-                    <div key={i}>
-                        <strong>{d.icd10Code}</strong>: {d.description}
-                    </div>
-                ))}
-            </Card>
+          <Card title="Diagnoses">
+            {record.diagnoses.map((d, i) => (
+              <div key={i}>
+                <strong>{d.icd10Code || d.code}</strong>: {d.description}
+              </div>
+            ))}
+          </Card>
         )}
       </div>
     </div>

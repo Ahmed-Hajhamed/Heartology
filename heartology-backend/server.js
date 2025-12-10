@@ -10,6 +10,7 @@ const doctorRoutes = require('./src/routes/doctorRoutes');
 const appointmentRoutes = require('./src/routes/appointmentRoutes');
 const medicalRecordRoutes = require('./src/routes/medicalRecordRoutes');
 const prescriptionRoutes = require('./src/routes/prescriptionRoutes');
+const billingRoutes = require('./src/routes/billingRoutes');
 
 
 
@@ -25,7 +26,7 @@ const app = express();
 app.use(express.json());
 app.use(cors({
   origin: 'http://localhost:3000',
-  credentials: true               
+  credentials: true
 }));
 app.use(helmet());
 app.use('/api/users', userRoutes);
@@ -35,6 +36,7 @@ app.use('/api/doctors', doctorRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/medical-records', medicalRecordRoutes);
 app.use('/api/prescriptions', prescriptionRoutes);
+app.use('/api/billing', billingRoutes);
 
 
 if (process.env.NODE_ENV === 'development') {
