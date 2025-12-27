@@ -111,6 +111,7 @@ const createInvoice = async (req, res) => {
             paymentMethod: null,
             paidAt: null,
             invoiceNumber: `INV-${Date.now()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`,
+            invoiceDate: new Date().toISOString(),
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
         };

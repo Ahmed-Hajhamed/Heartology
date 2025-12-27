@@ -132,7 +132,12 @@ const InvoiceDetails = () => {
         <Card className="flex-1">
           <h3>Invoice Info</h3>
           <p><strong>Invoice #:</strong> {invoice.invoiceNumber || invoice.id}</p>
-          <p><strong>Date:</strong> {invoice.invoiceDate ? new Date(invoice.invoiceDate).toLocaleDateString() : 'N/A'}</p>
+          <p><strong>Date:</strong> {(() => {
+            const dateValue = invoice.invoiceDate || invoice.createdAt;
+            if (!dateValue) return 'N/A';
+            const dateObj = new Date(dateValue);
+            return isNaN(dateObj.getTime()) ? 'Invalid Date' : dateObj.toLocaleDateString();
+          })()}</p>
           <p><strong>Due Date:</strong> {invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString() : 'N/A'}</p>
           <p><strong>Status:</strong> <span className={`status status-${invoice.status?.toLowerCase()}`}>{invoice.status}</span></p>
         </Card>

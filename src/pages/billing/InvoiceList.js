@@ -34,14 +34,20 @@ const InvoiceList = () => {
         const response = await api.get(`/billing/invoices${queryParams}`);
         
         // 3. Map Data
-        const mappedData = response.data.data.map(inv => ({
-            invoiceId: inv.id,
-            patientName: inv.patientId, // Backend sends ID. Fetch name if needed.
-            issueDate: new Date(inv.invoiceDate).toLocaleDateString(),
-            totalAmount: inv.totalAmount,
-            status: inv.status,
-            rawDate: inv.invoiceDate
-        }));
+        const mappedData = response.data.data.map(inv => {
+            // Use invoiceDate, createdAt, or fallback to current date
+            const dateValue = inv.invoiceDate || inv.createdAt || new Date().toISOString();
+            const dateObj = new Date(dateValue);
+            
+            return {
+                invoiceId: inv.id,
+                patientName: inv.patientName || inv.patientId, // Use patientName if available
+                issueDate: isNaN(dateObj.getTime()) ? 'Invalid Date' : dateObj.toLocaleDateString(),
+                totalAmount: inv.totalAmount || 0,
+                status: inv.status,
+                rawDate: dateValue
+            };
+        });
 
         setInvoices(mappedData);
 
