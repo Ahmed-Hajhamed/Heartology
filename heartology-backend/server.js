@@ -10,6 +10,8 @@ const doctorRoutes = require('./src/routes/doctorRoutes');
 const appointmentRoutes = require('./src/routes/appointmentRoutes');
 const medicalRecordRoutes = require('./src/routes/medicalRecordRoutes');
 const prescriptionRoutes = require('./src/routes/prescriptionRoutes');
+const billingRoutes = require('./src/routes/billingRoutes');
+const analyticsRoutes = require('./src/routes/analyticsRoutes');
 
 
 
@@ -24,8 +26,10 @@ const app = express();
 // Middleware
 app.use(express.json());
 app.use(cors({
-  origin: 'http://localhost:3000',
-  credentials: true               
+  origin: ['http://localhost:3000', 'http://localhost:3001'], // Allow both OHIF (3000) and React app (3001)
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(helmet());
 app.use('/api/users', userRoutes);
@@ -35,6 +39,8 @@ app.use('/api/doctors', doctorRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/medical-records', medicalRecordRoutes);
 app.use('/api/prescriptions', prescriptionRoutes);
+app.use('/api/billing', billingRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 
 if (process.env.NODE_ENV === 'development') {

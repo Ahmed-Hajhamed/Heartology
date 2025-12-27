@@ -8,7 +8,7 @@ import api from '../../services/api';
 const AppointmentDetails = () => {
   const { appointmentId } = useParams();
   const navigate = useNavigate();
-  
+
   // State for real data
   const [appointment, setAppointment] = useState(null);
   const [patientName, setPatientName] = useState('Loading...');
@@ -26,28 +26,28 @@ const AppointmentDetails = () => {
 
         // 2. Fetch Patient Name
         if (apptData.patientId) {
-            try {
-                const pRes = await api.get(`/patients/${apptData.patientId}`);
-                // Patient API returns combined data usually, or we dig into personalInfo
-                const pData = pRes.data.data;
-                const name = pData.personalInfo 
-                    ? `${pData.personalInfo.firstName} ${pData.personalInfo.lastName}`
-                    : 'Unknown Patient';
-                setPatientName(name);
-            } catch (err) {
-                setPatientName('Unknown ID');
-            }
+          try {
+            const pRes = await api.get(`/patients/${apptData.patientId}`);
+            // Patient API returns combined data usually, or we dig into personalInfo
+            const pData = pRes.data.data;
+            const name = pData.personalInfo
+              ? `${pData.personalInfo.firstName} ${pData.personalInfo.lastName}`
+              : 'Unknown Patient';
+            setPatientName(name);
+          } catch (err) {
+            setPatientName('Unknown ID');
+          }
         }
 
         // 3. Fetch Doctor Name
         if (apptData.doctorId) {
-            try {
-                const dRes = await api.get(`/doctors/${apptData.doctorId}`);
-                const dData = dRes.data.data;
-                setDoctorName(`Dr. ${dData.firstName} ${dData.lastName}`);
-            } catch (err) {
-                setDoctorName('Unknown Doctor');
-            }
+          try {
+            const dRes = await api.get(`/doctors/${apptData.doctorId}`);
+            const dData = dRes.data.data;
+            setDoctorName(`Dr. ${dData.firstName} ${dData.lastName}`);
+          } catch (err) {
+            setDoctorName('Unknown Doctor');
+          }
         }
 
       } catch (error) {
@@ -73,6 +73,24 @@ const AppointmentDetails = () => {
     }
   };
 
+  // Handle status update
+  const handleStatusUpdate = async (newStatus) => {
+    const confirmMsg = newStatus === 'Completed'
+      ? 'Mark as completed? This will auto-generate an invoice.'
+      : `Update status to "${newStatus}"?`;
+
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      const response = await api.patch(`/appointments/${appointmentId}/status`, { status: newStatus });
+      alert(response.data.message);
+      window.location.reload(); // Refresh to see new status
+    } catch (error) {
+      console.error(error);
+      alert(error.response?.data?.message || 'Failed to update status.');
+    }
+  };
+
   if (loading) return <div className="page-container">Loading details...</div>;
   if (!appointment) return <div className="page-container">Appointment not found.</div>;
 
@@ -82,10 +100,25 @@ const AppointmentDetails = () => {
         <h1>Appointment Details</h1>
         <div className="header-actions">
           <Button variant="secondary" onClick={() => navigate(-1)}>Back</Button>
-          
-          {/* Only show Cancel button if it's not already cancelled or completed */}
-          {['Scheduled', 'Confirmed'].includes(appointment.status) && (
-            <Button variant="danger" onClick={() => setShowCancelModal(true)}>Cancel Appointment</Button>
+
+          {/* Status Update Buttons based on current status */}
+          {appointment.status === 'Scheduled' && (
+            <>
+              <Button onClick={() => handleStatusUpdate('Confirmed')}>✅ Confirm</Button>
+              <Button variant="danger" onClick={() => setShowCancelModal(true)}>❌ Cancel</Button>
+            </>
+          )}
+
+          {appointment.status === 'Confirmed' && (
+            <>
+              <Button onClick={() => handleStatusUpdate('Completed')}>✅ Mark Completed</Button>
+              <Button variant="secondary" onClick={() => handleStatusUpdate('No Show')}>🚫 No Show</Button>
+              <Button variant="danger" onClick={() => setShowCancelModal(true)}>❌ Cancel</Button>
+            </>
+          )}
+
+          {appointment.status === 'Completed' && (
+            <Button onClick={() => navigate(`/billing/invoices`)}>💳 View Invoice</Button>
           )}
         </div>
       </div>
@@ -122,7 +155,7 @@ const AppointmentDetails = () => {
             </div>
             <div className="info-item">
               <label>Patient ID:</label>
-              <span style={{fontSize: '0.8em', color: '#666'}}>{appointment.patientId}</span>
+              <span style={{ fontSize: '0.8em', color: '#666' }}>{appointment.patientId}</span>
             </div>
           </div>
           <Button size="small" onClick={() => navigate(`/patients/${appointment.patientId}/medical-profile`)}>
@@ -138,7 +171,7 @@ const AppointmentDetails = () => {
             </div>
             <div className="info-item">
               <label>Doctor ID:</label>
-              <span style={{fontSize: '0.8em', color: '#666'}}>{appointment.doctorId}</span>
+              <span style={{ fontSize: '0.8em', color: '#666' }}>{appointment.doctorId}</span>
             </div>
           </div>
         </Card>
@@ -146,12 +179,20 @@ const AppointmentDetails = () => {
         <Card title="Reason for Visit">
           <p>{appointment.reasonForVisit || appointment.reason || 'No reason provided.'}</p>
         </Card>
-        
+
         {/* Show Notes if they exist */}
         {appointment.notes && (
-            <Card title="Clinical Notes">
-                <p>{appointment.notes}</p>
-            </Card>
+          <Card title="Clinical Notes">
+            <p>{appointment.notes}</p>
+          </Card>
+        )}
+
+        {/* Show Invoice section for Completed appointments */}
+        {appointment.status === 'Completed' && (
+          <Card title="💳 Billing">
+            <p style={{ marginBottom: '15px' }}>An invoice has been generated for this appointment.</p>
+            <Button onClick={() => navigate('/billing/invoices')}>View Invoice</Button>
+          </Card>
         )}
       </div>
 

@@ -20,7 +20,7 @@ const Sidebar = ({ user }) => {
           { path: '/prescriptions', label: 'Prescriptions', icon: '💊', end: true },
           { path: '/billing/invoices', label: 'Billing', icon: '💰', end: true },
         ];
-      
+
       case 'doctor':
         return [
           ...commonItems,
@@ -33,7 +33,7 @@ const Sidebar = ({ user }) => {
           { path: '/radiology', label: 'Radiology', icon: '🔬', end: true },
           { path: '/icd10', label: 'ICD-10 Lookup', icon: '🔍' },
         ];
-      
+
       case 'admin':
         return [
           ...commonItems,
@@ -45,8 +45,9 @@ const Sidebar = ({ user }) => {
           { path: '/billing/invoices', label: 'Billing', icon: '💰', end: true },
           { path: '/radiology', label: 'Radiology', icon: '🔬', end: true },
           { path: '/icd10', label: 'ICD-10 Lookup', icon: '🔍' },
+          { path: '/reports', label: 'Reports', icon: '📈' },
         ];
-      
+
       case 'staff':
         return [
           ...commonItems,
@@ -56,8 +57,9 @@ const Sidebar = ({ user }) => {
           { path: '/billing/invoices', label: 'Billing', icon: '💰', end: true },
           { path: '/billing/invoices/create', label: 'New Invoice', icon: '📄' },
           { path: '/radiology', label: 'Radiology', icon: '🔬', end: true },
+          { path: '/reports', label: 'Reports', icon: '📈' },
         ];
-      
+
       default:
         return commonItems;
     }

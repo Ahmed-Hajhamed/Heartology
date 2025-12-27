@@ -1,4 +1,5 @@
-const { admin, db } = require('../config/firebase');
+const { db } = require('../config/firebase');
+const jwt = require('jsonwebtoken');
 
 const protect = async (req, res, next) => {
   let token;
@@ -8,12 +9,11 @@ const protect = async (req, res, next) => {
       // Get token from header
       token = req.headers.authorization.split(' ')[1];
 
-      // 1. Verify Token with Firebase Admin
-      const decodedToken = await admin.auth().verifyIdToken(token);
-      
-      // 2. Get User from Firestore using the Firebase UID
-      // Note: We now assume the Firestore Document ID is the same as the Firebase UID
-      const userDoc = await db.collection('users').doc(decodedToken.uid).get();
+      // 1. Verify Token (Custom JWT)
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
+
+      // 2. Get User from Firestore using the ID from payload
+      const userDoc = await db.collection('users').doc(decoded.id).get();
 
       if (!userDoc.exists) {
         return res.status(401).json({ success: false, message: 'User profile not found' });
@@ -21,6 +21,9 @@ const protect = async (req, res, next) => {
 
       // Attach user info to request
       req.user = { id: userDoc.id, ...userDoc.data() };
+      // Remove password
+      if (req.user.password) delete req.user.password;
+
       next();
 
     } catch (error) {

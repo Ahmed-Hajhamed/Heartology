@@ -19,35 +19,34 @@ const AppointmentList = () => {
       try {
         const user = JSON.parse(localStorage.getItem('user'));
         setUserRole(user.role);
-        
+
         let queryParams = '';
 
         // 1. Determine Identity (Patient vs Doctor)
         if (user.role === 'patient') {
-            // Find my Patient ID
-            const pRes = await api.get('/patients');
-            const myProfile = pRes.data.data.find(p => p.userId === user.id);
-            if (myProfile) queryParams = `?patientId=${myProfile.id}`;
-        } 
+          // Find my Patient ID
+          const pRes = await api.get('/patients');
+          const myProfile = pRes.data.data.find(p => p.userId === user.id);
+          if (myProfile) queryParams = `?patientId=${myProfile.id}`;
+        }
         else if (user.role === 'doctor') {
-            // Find my Doctor ID
-            const dRes = await api.get('/doctors');
-            const myDocProfile = dRes.data.data.find(d => d.userId === user.id);
-            if (myDocProfile) queryParams = `?doctorId=${myDocProfile.id}`;
+          // Find my Doctor ID
+          const dRes = await api.get('/doctors');
+          const myDocProfile = dRes.data.data.find(d => d.userId === user.id);
+          if (myDocProfile) queryParams = `?doctorId=${myDocProfile.id}`;
         }
 
         // 2. Fetch Appointments
         const response = await api.get(`/appointments${queryParams}`);
-        
-        // 3. Transform Data for Table
-        // Fetch Doctor and Patient names
+
+        // 3. Fetch Doctors for name mapping
         const doctorsRes = await api.get('/doctors');
         const doctorsMap = {};
         doctorsRes.data.data.forEach(d => {
-            doctorsMap[d.id] = `Dr. ${d.name || d.lastName || 'Unknown'}`;
+          doctorsMap[d.id] = `Dr. ${d.name || d.lastName || 'Unknown'}`;
         });
 
-        // Fetch patient names
+        // 4. Fetch patient names (using personalInfo for better accuracy)
         const patientsRes = await api.get('/patients');
         const patientsMap = {};
         for (const p of patientsRes.data.data) {
@@ -63,15 +62,26 @@ const AppointmentList = () => {
             }
         }
 
+        // 5. Fetch Invoices to map invoice status to appointments
+        const invoicesRes = await api.get('/billing/invoices');
+        const invoicesMap = {};
+        invoicesRes.data.data.forEach(inv => {
+          if (inv.appointmentId) {
+            invoicesMap[inv.appointmentId] = inv.status; // 'Pending' or 'Paid'
+          }
+        });
+
+        // 6. Transform Data for Table
         const mappedData = response.data.data.map(apt => ({
-            appointmentId: apt.id,
-            patientName: patientsMap[apt.patientId] || apt.patientName || 'Unknown',
-            doctorName: doctorsMap[apt.doctorId] || 'Unknown',
-            date: new Date(apt.appointmentDate).toLocaleDateString('en-GB'), // dd/mm/yyyy format
-            time: apt.appointmentTime,
-            type: apt.type,
-            status: apt.status,
-            rawDate: apt.appointmentDate
+          appointmentId: apt.id,
+          patientName: patientsMap[apt.patientId] || apt.patientName || 'Unknown',
+          doctorName: doctorsMap[apt.doctorId] || 'Unknown',
+          date: new Date(apt.appointmentDate).toLocaleDateString('en-GB'), // dd/mm/yyyy format
+          time: apt.appointmentTime,
+          type: apt.type,
+          status: apt.status,
+          invoiceStatus: invoicesMap[apt.id] || null, // Real invoice status
+          rawDate: apt.appointmentDate
         }));
 
         setAppointments(mappedData);
@@ -87,21 +97,34 @@ const AppointmentList = () => {
   }, []);
 
   const columns = [
-    { header: 'Appointment ID', accessor: 'appointmentId' },
+    { header: 'Date', accessor: 'date' },
+    { header: 'Time', accessor: 'time' },
     // Only show Patient column for non-patient users
     ...(userRole !== 'patient' ? [{ header: 'Patient', accessor: 'patientName' }] : []),
     { header: 'Doctor', accessor: 'doctorName' },
-    { header: 'Date', accessor: 'date' },
-    { header: 'Time', accessor: 'time' },
-    { 
-      header: 'Type', 
+    {
+      header: 'Type',
       accessor: 'type',
       render: (row) => <span className="tag tag-info">{row.type}</span>
     },
-    { 
-      header: 'Status', 
+    {
+      header: 'Status',
       accessor: 'status',
       render: (row) => <span className={`status status-${row.status.toLowerCase()}`}>{row.status}</span>
+    },
+    {
+      header: 'Invoice',
+      accessor: 'invoiceStatus',
+      render: (row) => {
+        // Show real invoice status
+        if (row.invoiceStatus === 'Paid') {
+          return <span className="status status-completed">Paid</span>;
+        } else if (row.invoiceStatus === 'Pending') {
+          return <span className="status status-pending">Pending</span>;
+        } else {
+          return <span style={{ color: '#999' }}>-</span>;
+        }
+      }
     },
     {
       header: 'Actions',
@@ -131,7 +154,7 @@ const AppointmentList = () => {
         <h1>Appointments</h1>
         {/* Only Patients and Staff can book new appointments here */}
         {['patient', 'staff'].includes(userRole) && (
-            <Button onClick={() => navigate('/appointments/book')}>Book New Appointment</Button>
+          <Button onClick={() => navigate('/appointments/book')}>Book New Appointment</Button>
         )}
       </div>
 

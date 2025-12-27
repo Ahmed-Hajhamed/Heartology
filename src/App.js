@@ -39,8 +39,9 @@ import CreateInvoice from './pages/billing/CreateInvoice';
 import InvoiceDetails from './pages/billing/InvoiceDetails';
 import PaymentProcessing from './pages/billing/PaymentProcessing';
 import Icd10Lookup from './pages/icd10/Icd10Lookup';
-import RadiologyList from './pages/radiology/RadiologyList'; // If you have this
-// If you don't have Radiology pages yet, you can comment them out below
+import RadiologyList from './pages/radiology/RadiologyList';
+import RadiologyViewer from './pages/radiology/RadiologyViewer';
+import Reports from './pages/reports/Reports';
 
 function App() {
   // --- THE FIX IS HERE ---
@@ -54,7 +55,7 @@ function App() {
     if (!user) {
       return <Navigate to="/login" replace />;
     }
-    
+
     if (allowedRoles && !allowedRoles.includes(user.role)) {
       return <Navigate to="/unauthorized" replace />;
     }
@@ -73,7 +74,7 @@ function App() {
 
         {/* Protected Routes */}
         <Route element={<MainLayout user={user} setUser={setUser} />}>
-          
+
           {/* Dashboards */}
           <Route path="/dashboard/patient" element={<ProtectedRoute allowedRoles={['patient']}><PatientDashboard /></ProtectedRoute>} />
           <Route path="/dashboard/doctor" element={<ProtectedRoute allowedRoles={['doctor']}><DoctorDashboard /></ProtectedRoute>} />
@@ -117,11 +118,17 @@ function App() {
           <Route path="/billing/payment/:invoiceId" element={<ProtectedRoute><PaymentProcessing /></ProtectedRoute>} />
 
           {/* Tools */}
-          <Route path="/icd10" element={<ProtectedRoute><Icd10Lookup /></ProtectedRoute>} />
+          <Route path="/icd10" element={<ProtectedRoute><Icd10Lookup /></ProtectedRoute} />
           
+          {/* Radiology */}
+          <Route path="/radiology" element={<ProtectedRoute><RadiologyList /></ProtectedRoute} />
+          <Route path="/radiology/:studyId" element={<ProtectedRoute><RadiologyViewer /></ProtectedRoute} />
+          
+          {/* Reports */}
+          <Route path="/reports" element={<ProtectedRoute allowedRoles={['admin', 'staff']}><Reports /></ProtectedRoute} />
           {/* Default */}
           <Route path="/" element={<Navigate to="/login" replace />} />
-          <Route path="/unauthorized" element={<div style={{padding:'20px'}}>Unauthorized Access</div>} />
+          <Route path="/unauthorized" element={<div style={{ padding: '20px' }}>Unauthorized Access</div>} />
         </Route>
       </Routes>
     </Router>

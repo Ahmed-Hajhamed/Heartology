@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
+import DICOMViewer from '../../components/radiology/DICOMViewer';
 import api from '../../services/api';
 import '../../styles/pages/PatientDetails.css';
 
@@ -10,6 +11,9 @@ const PatientDetails = () => {
   const navigate = useNavigate();
   const [patient, setPatient] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [radiologyScans, setRadiologyScans] = useState([]);
+  const [selectedStudy, setSelectedStudy] = useState(null);
+  const [loadingScans, setLoadingScans] = useState(false);
 
   useEffect(() => {
     const fetchPatientDetails = async () => {
@@ -25,6 +29,58 @@ const PatientDetails = () => {
     };
 
     fetchPatientDetails();
+  }, [patientId]);
+
+  useEffect(() => {
+    const fetchRadiologyScans = async () => {
+      setLoadingScans(true);
+      try {
+        // TODO: Replace with actual API endpoint when backend is ready
+        // For now, we'll fetch from Orthanc directly or use a mock
+        // Example: const response = await api.get(`/patients/${patientId}/radiology-scans`);
+        
+        // Fetch studies from Orthanc for this patient
+        // You'll need to match patient ID with Orthanc patient identifiers
+        const orthancUrl = 'http://localhost:8042'; // Default Orthanc port
+        
+        try {
+          // Query Orthanc for studies - this requires patient ID mapping
+          // For now, using a placeholder that you can replace with actual Orthanc API calls
+          const response = await fetch(`${orthancUrl}/patients?expand`);
+          if (response.ok) {
+            const patients = await response.json();
+            // Filter studies for this patient (you'll need to match by patient ID/name)
+            // This is a simplified example - adjust based on your Orthanc setup
+            const studies = [];
+            for (const orthancPatient of patients) {
+              if (orthancPatient.MainDicomTags && 
+                  orthancPatient.MainDicomTags.PatientID === patientId) {
+                // Get studies for this patient
+                const studiesResponse = await fetch(`${orthancUrl}/patients/${orthancPatient.ID}/studies?expand`);
+                if (studiesResponse.ok) {
+                  const patientStudies = await studiesResponse.json();
+                  studies.push(...patientStudies);
+                }
+              }
+            }
+            setRadiologyScans(studies);
+          }
+        } catch (orthancError) {
+          console.warn("Could not fetch from Orthanc, using empty list:", orthancError);
+          // If Orthanc is not accessible, set empty array
+          setRadiologyScans([]);
+        }
+      } catch (error) {
+        console.error("Error fetching radiology scans:", error);
+        setRadiologyScans([]);
+      } finally {
+        setLoadingScans(false);
+      }
+    };
+
+    if (patientId) {
+      fetchRadiologyScans();
+    }
   }, [patientId]);
 
   if (loading) return <div className="page-container">Loading details...</div>;
@@ -132,6 +188,89 @@ const PatientDetails = () => {
           </div>
         </Card>
       </div>
+
+      {/* Radiology Scans Section */}
+      <Card title="Radiology Scans">
+        {loadingScans ? (
+          <div style={{ padding: '20px', textAlign: 'center' }}>Loading radiology scans...</div>
+        ) : radiologyScans.length === 0 ? (
+          <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
+            <p>No radiology scans available for this patient.</p>
+            <Button 
+              size="small" 
+              onClick={() => navigate('/radiology/upload')}
+              style={{ marginTop: '10px' }}
+            >
+              Upload New Scan
+            </Button>
+          </div>
+        ) : (
+          <div>
+            <div className="radiology-scans-list" style={{ marginBottom: '20px' }}>
+              {radiologyScans.map((study) => {
+                const studyInfo = study.MainDicomTags || {};
+                const studyDate = studyInfo.StudyDate || 'N/A';
+                const studyDescription = studyInfo.StudyDescription || 'No description';
+                const modality = studyInfo.ModalitiesInStudy?.[0] || 'N/A';
+                const studyInstanceUID = study.MainDicomTags?.StudyInstanceUID || study.ID;
+                
+                return (
+                  <div 
+                    key={study.ID} 
+                    className={`radiology-scan-item ${selectedStudy?.ID === study.ID ? 'selected' : ''}`}
+                    style={{
+                      padding: '15px',
+                      border: '1px solid #e0e0e0',
+                      borderRadius: '4px',
+                      marginBottom: '10px',
+                      cursor: 'pointer',
+                      backgroundColor: selectedStudy?.ID === study.ID ? '#f0f7ff' : '#fff',
+                      transition: 'all 0.2s'
+                    }}
+                    onClick={() => setSelectedStudy(study)}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <h4 style={{ margin: '0 0 5px 0' }}>{studyDescription}</h4>
+                        <div style={{ display: 'flex', gap: '15px', fontSize: '0.9em', color: '#666' }}>
+                          <span><strong>Date:</strong> {studyDate}</span>
+                          <span><strong>Modality:</strong> {modality}</span>
+                          <span><strong>Series:</strong> {study.SeriesCount || 0}</span>
+                        </div>
+                      </div>
+                      <Button 
+                        size="small" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedStudy(study);
+                        }}
+                      >
+                        View
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            
+            {selectedStudy && (
+              <div style={{ marginTop: '20px' }}>
+                <DICOMViewer
+                  studyInstanceUID={selectedStudy.MainDicomTags?.StudyInstanceUID}
+                  orthancStudyId={selectedStudy.ID}
+                  patientId={patientId}
+                  studyInfo={{
+                    studyDate: selectedStudy.MainDicomTags?.StudyDate,
+                    modality: selectedStudy.MainDicomTags?.ModalitiesInStudy?.[0],
+                    studyDescription: selectedStudy.MainDicomTags?.StudyDescription
+                  }}
+                  ohifBaseUrl="http://localhost:3000"
+                />
+              </div>
+            )}
+          </div>
+        )}
+      </Card>
 
       <Card title="Quick Actions">
         <div className="quick-actions">
