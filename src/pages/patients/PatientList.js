@@ -19,17 +19,40 @@ const PatientList = () => {
       try {
         const response = await api.get('/patients');
         
-        // 2. Map Backend Data to Table Format
-        const mappedData = response.data.data.map(p => ({
-            patientId: p.id,
-            // Access personal info from the joined user data (if backend sends it)
-            // Or fallback to top-level fields if your backend structure varies
-            name: p.personalInfo ? `${p.personalInfo.firstName} ${p.personalInfo.lastName}` : 'Unknown',
-            email: p.personalInfo?.email || 'N/A',
-            phone: p.personalInfo?.phone || 'N/A',
-            bloodType: p.bloodType || 'N/A',
-            lastVisit: p.lastVisit ? new Date(p.lastVisit).toLocaleDateString() : 'Never'
-        }));
+        // 2. Fetch full details for each patient (includes personalInfo)
+        const mappedData = await Promise.all(
+          response.data.data.map(async (p) => {
+            try {
+              // Get full patient details with user info
+              const detailRes = await api.get(`/patients/${p.id}`);
+              const patient = detailRes.data.data;
+              const info = patient.personalInfo || {};
+              
+              return {
+                patientId: patient.id,
+                name: info.firstName || info.lastName 
+                  ? `${info.firstName || ''} ${info.lastName || ''}`.trim() 
+                  : 'Unknown',
+                email: info.email || 'N/A',
+                phone: info.phone || 'N/A',
+                bloodType: patient.bloodType || 'N/A',
+                lastVisit: patient.lastVisit 
+                  ? new Date(patient.lastVisit).toLocaleDateString('en-GB') 
+                  : 'Never'
+              };
+            } catch {
+              // Fallback if individual fetch fails
+              return {
+                patientId: p.id,
+                name: 'Unknown',
+                email: 'N/A',
+                phone: 'N/A',
+                bloodType: p.bloodType || 'N/A',
+                lastVisit: 'Never'
+              };
+            }
+          })
+        );
 
         setPatients(mappedData);
       } catch (error) {

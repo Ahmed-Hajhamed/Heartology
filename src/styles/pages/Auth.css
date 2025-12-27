@@ -48,5 +48,16 @@
 }
 
 .register-form {
-  max-width: 600px;
+  max-width: 700px;
+}
+
+.register-form .form-row {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.register-form .form-row .form-field {
+  flex: 1;
+  min-width: 0;
 }

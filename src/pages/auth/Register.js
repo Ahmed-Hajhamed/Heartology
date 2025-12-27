@@ -18,11 +18,17 @@ const Register = () => {
     confirmPassword: '',
     role: 'patient',
     phone: '',
-    name: '',
+    firstName: '',
+    lastName: '',
     birthDate: '',
     gender: 'male',
-    address: ''
+    building: '',
+    street: '',
+    city: ''
   });
+
+  // Get today's date for max birth date validation
+  const today = new Date().toISOString().split('T')[0];
 
   const handleChange = (e) => {
     setFormData({
@@ -41,27 +47,39 @@ const Register = () => {
       return;
     }
 
+    // Phone validation (10-15 characters)
+    if (formData.phone.length < 10 || formData.phone.length > 15) {
+      setError('Phone number must be between 10 and 15 characters');
+      return;
+    }
+
+    // Birth date validation (no future dates)
+    if (new Date(formData.birthDate) > new Date()) {
+      setError('Birth date cannot be in the future');
+      return;
+    }
+
     try {
       // 2. Create User in Firebase Authentication first
       const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
       const firebaseUser = userCredential.user;
 
       // 3. Prepare Data for Backend (using Firebase UID)
-      const nameParts = formData.name.split(' ');
-      const firstName = nameParts[0];
-      const lastName = nameParts.slice(1).join(' ') || '';
-
       const payload = {
         uid: firebaseUser.uid, // CRITICAL: Send Firebase UID to backend
         email: formData.email,
         role: formData.role,
-        firstName: firstName,
-        lastName: lastName,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
         ssn: formData.ssn,
         phone: formData.phone,
         gender: formData.gender,
         dateOfBirth: formData.birthDate,
-        address: { street: formData.address }
+        address: {
+          building: formData.building,
+          street: formData.street,
+          city: formData.city
+        }
       };
 
       // 4. Save Profile to Backend
@@ -95,15 +113,27 @@ const Register = () => {
       <form onSubmit={handleSubmit}>
         <div className="form-row">
           <FormField
-            label="Full Name"
+            label="First Name"
             type="text"
-            name="name"
-            value={formData.name}
+            name="firstName"
+            value={formData.firstName}
             onChange={handleChange}
-            placeholder="Enter full name"
+            placeholder="Enter first name"
             required
           />
           
+          <FormField
+            label="Last Name"
+            type="text"
+            name="lastName"
+            value={formData.lastName}
+            onChange={handleChange}
+            placeholder="Enter last name"
+            required
+          />
+        </div>
+
+        <div className="form-row">
           <FormField
             label="Social Security Number"
             type="text"
@@ -133,6 +163,8 @@ const Register = () => {
             value={formData.phone}
             onChange={handleChange}
             placeholder="+1234567890"
+            minLength={10}
+            maxLength={15}
             required
           />
         </div>
@@ -144,6 +176,7 @@ const Register = () => {
             name="birthDate"
             value={formData.birthDate}
             onChange={handleChange}
+            max={today}
             required
           />
           
@@ -156,21 +189,42 @@ const Register = () => {
             options={[
               { value: 'male', label: 'Male' },
               { value: 'female', label: 'Female' },
-              { value: 'other', label: 'Other' }
             ]}
             required
           />
         </div>
 
-        <FormField
-          label="Address"
-          type="text"
-          name="address"
-          value={formData.address}
-          onChange={handleChange}
-          placeholder="Enter address"
-          required
-        />
+        <div className="form-row">
+          <FormField
+            label="Building"
+            type="text"
+            name="building"
+            value={formData.building}
+            onChange={handleChange}
+            placeholder="Building number/name"
+            required
+          />
+          
+          <FormField
+            label="Street"
+            type="text"
+            name="street"
+            value={formData.street}
+            onChange={handleChange}
+            placeholder="Street name"
+            required
+          />
+          
+          <FormField
+            label="City"
+            type="text"
+            name="city"
+            value={formData.city}
+            onChange={handleChange}
+            placeholder="City"
+            required
+          />
+        </div>
 
         <FormField
           label="Role"

@@ -40,22 +40,38 @@ const AppointmentList = () => {
         const response = await api.get(`/appointments${queryParams}`);
         
         // 3. Transform Data for Table
-        // We need to fetch Doctor names manually since the backend might not send them yet
+        // Fetch Doctor and Patient names
         const doctorsRes = await api.get('/doctors');
         const doctorsMap = {};
         doctorsRes.data.data.forEach(d => {
             doctorsMap[d.id] = `Dr. ${d.name || d.lastName || 'Unknown'}`;
         });
 
+        // Fetch patient names
+        const patientsRes = await api.get('/patients');
+        const patientsMap = {};
+        for (const p of patientsRes.data.data) {
+            // Try to get user info for patient name
+            try {
+                const userRes = await api.get(`/patients/${p.id}`);
+                const userData = userRes.data.data;
+                const firstName = userData.personalInfo?.firstName || '';
+                const lastName = userData.personalInfo?.lastName || '';
+                patientsMap[p.id] = firstName || lastName ? `${firstName} ${lastName}`.trim() : 'Unknown';
+            } catch {
+                patientsMap[p.id] = 'Unknown';
+            }
+        }
+
         const mappedData = response.data.data.map(apt => ({
-            appointmentId: apt.id, // Map backend '_id' to table 'appointmentId'
-            patientName: apt.patientName || 'Loading...', // Backend sends this
-            doctorName: doctorsMap[apt.doctorId] || 'Unknown', // Map ID to Name
-            date: new Date(apt.appointmentDate).toLocaleDateString(),
+            appointmentId: apt.id,
+            patientName: patientsMap[apt.patientId] || apt.patientName || 'Unknown',
+            doctorName: doctorsMap[apt.doctorId] || 'Unknown',
+            date: new Date(apt.appointmentDate).toLocaleDateString('en-GB'), // dd/mm/yyyy format
             time: apt.appointmentTime,
             type: apt.type,
             status: apt.status,
-            rawDate: apt.appointmentDate // Keep raw for sorting if needed
+            rawDate: apt.appointmentDate
         }));
 
         setAppointments(mappedData);
@@ -72,7 +88,8 @@ const AppointmentList = () => {
 
   const columns = [
     { header: 'Appointment ID', accessor: 'appointmentId' },
-    { header: 'Patient', accessor: 'patientName' },
+    // Only show Patient column for non-patient users
+    ...(userRole !== 'patient' ? [{ header: 'Patient', accessor: 'patientName' }] : []),
     { header: 'Doctor', accessor: 'doctorName' },
     { header: 'Date', accessor: 'date' },
     { header: 'Time', accessor: 'time' },
@@ -97,9 +114,14 @@ const AppointmentList = () => {
   ];
 
   // Filter Logic
-  const filteredAppointments = appointments.filter(apt =>
-    !statusFilter || apt.status.toLowerCase() === statusFilter.toLowerCase()
-  );
+  const filteredAppointments = appointments
+    .filter(apt => !statusFilter || apt.status.toLowerCase() === statusFilter.toLowerCase())
+    // Sort by nearest date/time first
+    .sort((a, b) => {
+      const dateTimeA = new Date(`${a.rawDate}T${a.time}`);
+      const dateTimeB = new Date(`${b.rawDate}T${b.time}`);
+      return dateTimeA - dateTimeB;
+    });
 
   if (loading) return <div className="page-container">Loading appointments...</div>;
 

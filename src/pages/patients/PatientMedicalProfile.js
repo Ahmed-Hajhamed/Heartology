@@ -1,16 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import FormField from '../../components/common/FormField';
 import Button from '../../components/common/Button';
 import Card from '../../components/common/Card';
 import api from '../../services/api';
-import '../../styles/pages/Dashboard.css'; // Reusing dashboard styles for card layout
+import '../../styles/pages/Dashboard.css';
 
 const PatientMedicalProfile = () => {
   const navigate = useNavigate();
+  const { patientId } = useParams(); // Get patientId from URL if present
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [isViewOnly, setIsViewOnly] = useState(false); // True when staff/doctor viewing another patient
+  const [patientName, setPatientName] = useState('');
   
   // This flag determines if we are Editing an existing profile or Creating a new one
   const [isEditing, setIsEditing] = useState(true); 
@@ -41,13 +44,34 @@ const PatientMedicalProfile = () => {
         }
         const user = JSON.parse(userStr);
 
-        // Check if backend already has a profile for this user
-        const response = await api.get('/patients');
-        // Find the profile linked to my User ID
-        const myProfile = response.data.data.find(p => p.userId === user.id);
+        let myProfile = null;
+
+        // If patientId is in URL (staff/doctor viewing a patient)
+        if (patientId) {
+          // Fetch the specific patient profile
+          const patientRes = await api.get(`/patients/${patientId}`);
+          myProfile = patientRes.data.data;
+          
+          // Set view-only mode for staff/doctors viewing other's profile
+          if (user.role !== 'patient') {
+            setIsViewOnly(true);
+            const firstName = myProfile.personalInfo?.firstName || '';
+            const lastName = myProfile.personalInfo?.lastName || '';
+            setPatientName(`${firstName} ${lastName}`.trim() || 'Patient');
+          }
+          
+          setIsEditing(false);
+        } else {
+          // Patient viewing/creating their own profile
+          const response = await api.get('/patients');
+          myProfile = response.data.data.find(p => p.userId === user.id);
+
+          if (myProfile) {
+            setIsEditing(false);
+          }
+        }
 
         if (myProfile) {
-            setIsEditing(false); // Switch to View mode
             // Pre-fill the form
             setFormData({
                 bloodType: myProfile.bloodType || '',
@@ -71,7 +95,8 @@ const PatientMedicalProfile = () => {
       }
     };
     fetchProfile();
-  }, [navigate]);
+  }, [navigate, patientId]);
+
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -135,8 +160,12 @@ const PatientMedicalProfile = () => {
 
   return (
     <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
-      <h1>Medical Profile</h1>
-      <p>Please complete this form to activate appointment booking.</p>
+      <h1>{isViewOnly ? `Medical Profile - ${patientName}` : 'Medical Profile'}</h1>
+      {isViewOnly ? (
+        <p>Viewing patient's medical profile (read-only).</p>
+      ) : (
+        <p>Please complete this form to activate appointment booking.</p>
+      )}
       
       {error && <div style={{color: 'red', marginBottom: '1rem', padding: '10px', background: '#ffe6e6'}}>{error}</div>}
 

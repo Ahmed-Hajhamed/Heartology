@@ -192,6 +192,7 @@ const DoctorDashboard = () => {
         <Button onClick={() => navigate('/medical-records/create')}>New Medical Record</Button>
         <Button variant="secondary" onClick={() => navigate('/prescriptions/create')}>New Prescription</Button>
         <Button variant="secondary" onClick={() => navigate('/patients')}>View Patients</Button>
+        <Button variant="secondary" onClick={() => navigate(`/doctors/${doctorProfile.id}/schedule`)}>Manage Schedule</Button>
       </div>
     </div>
   );

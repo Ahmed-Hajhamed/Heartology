@@ -14,6 +14,8 @@ const MedicalRecordList = () => {
   const [typeFilter, setTypeFilter] = useState('');
   const [userRole, setUserRole] = useState('');
 
+  const [noProfile, setNoProfile] = useState(false);
+
   // 1. Fetch Records on Load
   useEffect(() => {
     const fetchRecords = async () => {
@@ -34,20 +36,21 @@ const MedicalRecordList = () => {
             // Get my own ID first
             const pRes = await api.get('/patients');
             const myProfile = pRes.data.data.find(p => p.userId === user.id);
-            if (myProfile) endpoint += `?patientId=${myProfile.id}`;
+            if (myProfile) {
+                endpoint += `?patientId=${myProfile.id}`;
+            } else {
+                // Patient has no profile - show message instead of records
+                setNoProfile(true);
+                setLoading(false);
+                return;
+            }
         } else if (user.role === 'doctor') {
-            // Doctors usually see all, or filtered by their ID. 
-            // For now, let's show all or filter if backend supports it.
             const dRes = await api.get('/doctors');
             const myProfile = dRes.data.data.find(d => d.userId === user.id);
             if (myProfile) endpoint += `?doctorId=${myProfile.id}`;
         }
 
         const response = await api.get(endpoint);
-        
-        // 2. Enhance Data (Optional: Fetch Patient Names if missing)
-        // For simplicity, we assume backend might populate names or we map them.
-        // If backend sends raw IDs, the table will show IDs for now.
         setRecords(response.data.data);
 
       } catch (error) {
@@ -61,8 +64,8 @@ const MedicalRecordList = () => {
   }, [location.search]);
 
   const columns = [
-    { header: 'Record ID', accessor: 'id' }, // Backend uses 'id' or '_id'
-    { header: 'Record Date', render: (row) => new Date(row.recordDate).toLocaleDateString() },
+    { header: 'Record ID', accessor: 'id' },
+    { header: 'Record Date', render: (row) => new Date(row.recordDate).toLocaleDateString('en-GB') },
     { 
       header: 'Type', 
       accessor: 'recordType',
@@ -86,6 +89,23 @@ const MedicalRecordList = () => {
   );
 
   if (loading) return <div className="page-container">Loading medical records...</div>;
+
+  // Show message if patient has no profile
+  if (noProfile) {
+    return (
+      <div className="page-container">
+        <div className="page-header">
+          <h1>Medical Records</h1>
+        </div>
+        <Card>
+          <div style={{padding: '40px', textAlign: 'center'}}>
+            <p style={{marginBottom: '20px', fontSize: '16px'}}>You need to complete your medical profile first to view your medical records.</p>
+            <Button onClick={() => navigate('/patients/create')}>Complete Medical Profile</Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="page-container">

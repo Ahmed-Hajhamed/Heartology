@@ -11,7 +11,11 @@ const FormField = ({
   required = false,
   error,
   options,
-  disabled = false
+  disabled = false,
+  min,
+  max,
+  minLength,
+  maxLength
 }) => {
   const renderInput = () => {
     switch (type) {
@@ -56,6 +60,10 @@ const FormField = ({
             placeholder={placeholder}
             required={required}
             disabled={disabled}
+            min={min}
+            max={max}
+            minLength={minLength}
+            maxLength={maxLength}
           />
         );
     }
