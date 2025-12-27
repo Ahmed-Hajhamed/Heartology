@@ -39,8 +39,8 @@ import CreateInvoice from './pages/billing/CreateInvoice';
 import InvoiceDetails from './pages/billing/InvoiceDetails';
 import PaymentProcessing from './pages/billing/PaymentProcessing';
 import Icd10Lookup from './pages/icd10/Icd10Lookup';
-import RadiologyList from './pages/radiology/RadiologyList'; // If you have this
-// If you don't have Radiology pages yet, you can comment them out below
+import RadiologyList from './pages/radiology/RadiologyList';
+import RadiologyViewer from './pages/radiology/RadiologyViewer';
 
 function App() {
   // --- THE FIX IS HERE ---
@@ -118,6 +118,10 @@ function App() {
 
           {/* Tools */}
           <Route path="/icd10" element={<ProtectedRoute><Icd10Lookup /></ProtectedRoute>} />
+          
+          {/* Radiology */}
+          <Route path="/radiology" element={<ProtectedRoute><RadiologyList /></ProtectedRoute>} />
+          <Route path="/radiology/:studyId" element={<ProtectedRoute><RadiologyViewer /></ProtectedRoute>} />
           
           {/* Default */}
           <Route path="/" element={<Navigate to="/login" replace />} />
