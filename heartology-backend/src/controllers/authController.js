@@ -1,34 +1,32 @@
 const { db } = require('../config/firebase');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
-// @desc    Create User Profile (After Firebase Auth)
+// @desc    Register a new user
 // @route   POST /api/auth/register
 const register = async (req, res) => {
   try {
-    const { 
-      uid, // Firebase UID sent from frontend
-      email, 
-      role, 
-      firstName, 
-      lastName, 
-      phone, 
-      gender, 
-      dateOfBirth, 
-      address,
-      ssn 
+    const {
+      email, password, role, firstName, lastName, phone, gender, dateOfBirth, address, ssn
     } = req.body;
 
-    if (!uid || !email) {
-      return res.status(400).json({ success: false, message: 'UID and Email are required' });
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: 'Email and Password are required' });
     }
 
-    // Check if profile already exists
-    const userDoc = await db.collection('users').doc(uid).get();
-    if (userDoc.exists) {
-      return res.status(400).json({ success: false, message: 'User profile already exists' });
+    // Check if user already exists
+    const userQuery = await db.collection('users').where('email', '==', email).get();
+    if (!userQuery.empty) {
+      return res.status(400).json({ success: false, message: 'User already exists' });
     }
+
+    // Hash Password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
 
     const newUser = {
       email,
+      password: hashedPassword,
       role: role || 'patient',
       firstName,
       lastName,
@@ -41,12 +39,11 @@ const register = async (req, res) => {
       createdAt: new Date().toISOString()
     };
 
-    // Save using the Firebase UID as the Document ID
-    await db.collection('users').doc(uid).set(newUser);
+    const docRef = await db.collection('users').add(newUser);
 
     res.status(201).json({
       success: true,
-      user: { id: uid, ...newUser }
+      message: 'User registered successfully. Please login.'
     });
 
   } catch (error) {
@@ -54,29 +51,52 @@ const register = async (req, res) => {
   }
 };
 
-// @desc    Sync User (Login)
-// @route   POST /api/auth/login (or /sync)
+// @desc    Login User & Get Token
+// @route   POST /api/auth/login
 const login = async (req, res) => {
   try {
-    // Ideally, the middleware 'protect' has already verified the token
-    // and attached req.user. We just return it.
-    
-    // If this endpoint is public (no protect middleware), we verify the token manually here:
-    /*
-    const token = req.body.token;
-    const decoded = await admin.auth().verifyIdToken(token);
-    const uid = decoded.uid;
-    */
+    const { email, password } = req.body;
 
-    // But let's assume you call this route WITH the token header
-    // so 'protect' middleware handles verification.
-    
-    // We just return the user data needed for the frontend
-    const user = req.user; 
+    // Validate email & password
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: 'Please provide an email and password' });
+    }
+
+    // Check for user
+    const userQuery = await db.collection('users').where('email', '==', email).get();
+
+    if (userQuery.empty) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    }
+
+    const userDoc = userQuery.docs[0];
+    const user = userDoc.data();
+
+    // Check if password exists (some seeded users might not have it if seeded differently, but seed_v2 added it)
+    if (!user.password) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials (no password set)' });
+    }
+
+    // Match password
+    const isMatch = await bcrypt.compare(password, user.password);
+
+    if (!isMatch) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    }
+
+    // Create Token
+    const payload = { id: userDoc.id, role: user.role };
+    const token = jwt.sign(payload, process.env.JWT_SECRET || 'secret', {
+      expiresIn: process.env.JWT_EXPIRE || '30d'
+    });
+
+    // Remove password from response
+    delete user.password;
 
     res.status(200).json({
       success: true,
-      user: user
+      token,
+      user: { id: userDoc.id, ...user }
     });
 
   } catch (error) {

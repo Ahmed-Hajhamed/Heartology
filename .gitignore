@@ -1,5 +1,41 @@
+# Dependencies
 node_modules/
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Build outputs
+build/
+dist/
+
+# Firebase & Secrets
+serviceAccountKey.json
+*.json
+!package.json
+!package-lock.json
+!jsconfig.json
+!tsconfig.json
+
+# Explicitly ignore the service account key wherever it might be
+src/config/serviceAccountKey.json
+heartology-backend/src/config/serviceAccountKey.json
+heartology-backend/serviceAccountKey.json
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Misc
+.DS_Store
+.vscode/
+.idea/
+thumbs.db
+
+# Documentation drafts (preserving user's previous excludes)
 backend.md
 database.md
-readme.md
-serviceAccountKey.json

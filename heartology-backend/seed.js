@@ -20,11 +20,29 @@ const hashPassword = async (password) => {
     return bcrypt.hash(password, salt);
 };
 
+// Helper to clear a collection
+const clearCollection = async (collectionName) => {
+    const snapshot = await db.collection(collectionName).get();
+    const batch = db.batch();
+    snapshot.docs.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
+    console.log(`  🗑️  Cleared ${collectionName} (${snapshot.size} docs)`);
+};
+
 // Sample Data
 const seedData = async () => {
     console.log('🌱 Starting database seed...');
 
     try {
+        // Clear existing data first to avoid duplicates
+        console.log('\n🧹 Cleaning up old data...');
+        await clearCollection('prescriptions');
+        await clearCollection('medicalRecords');
+        await clearCollection('invoices');
+        await clearCollection('appointments');
+        await clearCollection('patients');
+        await clearCollection('doctors');
+        await clearCollection('users');
         // ========== 1. CREATE USERS ==========
         console.log('Creating users...');
         const hashedPassword = await hashPassword('password123');

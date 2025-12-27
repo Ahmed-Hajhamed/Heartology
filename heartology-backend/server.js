@@ -11,6 +11,7 @@ const appointmentRoutes = require('./src/routes/appointmentRoutes');
 const medicalRecordRoutes = require('./src/routes/medicalRecordRoutes');
 const prescriptionRoutes = require('./src/routes/prescriptionRoutes');
 const billingRoutes = require('./src/routes/billingRoutes');
+const analyticsRoutes = require('./src/routes/analyticsRoutes');
 
 
 
@@ -39,6 +40,7 @@ app.use('/api/appointments', appointmentRoutes);
 app.use('/api/medical-records', medicalRecordRoutes);
 app.use('/api/prescriptions', prescriptionRoutes);
 app.use('/api/billing', billingRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 
 if (process.env.NODE_ENV === 'development') {
