@@ -20,7 +20,8 @@ const AppointmentBooking = () => {
     scheduledTime: '',
     duration: '30',
     type: 'Check-up',
-    reason: ''
+    reason: '',
+    requiredScanCode: ''  // Scan code like "A0S9V9"
   });
 
   // Get today's date for min date validation
@@ -179,6 +180,7 @@ const AppointmentBooking = () => {
         duration: parseInt(formData.duration),
         type: formData.type,
         reasonForVisit: formData.reason,
+        requiredScanCode: formData.requiredScanCode || null,  // Include scan code if provided
         status: 'Scheduled'
       };
 
@@ -312,6 +314,19 @@ const AppointmentBooking = () => {
             placeholder="Describe your symptoms..."
             required
           />
+
+          {/* Scan Code Field - Only for Doctors */}
+          {userRole === 'doctor' && (
+            <FormField
+              label="Required Scan Code (Optional)"
+              type="text"
+              name="requiredScanCode"
+              value={formData.requiredScanCode}
+              onChange={handleChange}
+              placeholder="e.g., A0S9V9"
+              helpText="Enter the scan code if this appointment requires a radiology scan"
+            />
+          )}
         </Card>
 
         <div className="form-actions" style={{ marginTop: '20px' }}>

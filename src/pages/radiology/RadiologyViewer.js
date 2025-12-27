@@ -2,7 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
+import FormField from '../../components/common/FormField';
+import Modal from '../../components/common/Modal';
 import DICOMViewer from '../../components/radiology/DICOMViewer';
+import api from '../../services/api';
 
 const RadiologyViewer = () => {
   const { studyId } = useParams();
@@ -10,10 +13,20 @@ const RadiologyViewer = () => {
   const navigate = useNavigate();
   const [studyInfo, setStudyInfo] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [scanCode, setScanCode] = useState('');
+  const [linking, setLinking] = useState(false);
+  const [userRole, setUserRole] = useState('');
 
   // Get study info from URL params or fetch from Orthanc
   const studyInstanceUID = searchParams.get('studyInstanceUID') || studyId;
   const patientId = searchParams.get('patientId');
+
+  useEffect(() => {
+    // Get user role
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    setUserRole(user.role || '');
+  }, []);
 
   useEffect(() => {
     const fetchStudyInfo = async () => {
@@ -57,6 +70,47 @@ const RadiologyViewer = () => {
     fetchStudyInfo();
   }, [studyInstanceUID]);
 
+  const handleLinkScan = async () => {
+    if (!scanCode || !studyInstanceUID) {
+      alert('Please enter a scan code');
+      return;
+    }
+
+    setLinking(true);
+    try {
+      // First, find the appointment by scan code
+      const appointmentsRes = await api.get('/appointments');
+      const appointments = appointmentsRes.data.data;
+      
+      // Find appointment with matching scan code
+      const appointment = appointments.find(apt => 
+        apt.requiredScanCode && apt.requiredScanCode.toUpperCase() === scanCode.toUpperCase()
+      );
+
+      if (!appointment) {
+        alert(`No appointment found with scan code: ${scanCode}`);
+        setLinking(false);
+        return;
+      }
+
+      // Link the scan to the appointment
+      await api.patch(`/appointments/${appointment.id}/link-scan`, {
+        scanStudyInstanceUID: studyInfo?.studyInstanceUID || studyInstanceUID,
+        scanStudyId: studyId,
+        scanCode: scanCode.toUpperCase()
+      });
+
+      alert('Scan linked to appointment successfully!');
+      setShowLinkModal(false);
+      setScanCode('');
+    } catch (error) {
+      console.error('Error linking scan:', error);
+      alert(error.response?.data?.message || 'Failed to link scan to appointment');
+    } finally {
+      setLinking(false);
+    }
+  };
+
   if (loading) {
     return <div className="page-container">Loading viewer...</div>;
   }
@@ -95,9 +149,51 @@ const RadiologyViewer = () => {
         studyInfo={studyInfo}
         ohifBaseUrl="http://localhost:3000"
       />
+
+      {/* Link Scan to Appointment - For Staff/Admin */}
+      {(userRole === 'staff' || userRole === 'admin') && (
+        <Card title="Link to Appointment" style={{ marginTop: '20px' }}>
+          <p style={{ marginBottom: '15px', color: '#666' }}>
+            Link this scan to an appointment by entering the scan code provided by the doctor.
+          </p>
+          <Button onClick={() => setShowLinkModal(true)}>Link Scan to Appointment</Button>
+        </Card>
+      )}
+
+      <Modal
+        isOpen={showLinkModal}
+        onClose={() => setShowLinkModal(false)}
+        title="Link Scan to Appointment"
+        footer={
+          <>
+            <Button 
+              onClick={handleLinkScan}
+              disabled={linking || !scanCode}
+            >
+              {linking ? 'Linking...' : 'Link Scan'}
+            </Button>
+            <Button variant="secondary" onClick={() => setShowLinkModal(false)}>Cancel</Button>
+          </>
+        }
+      >
+        <FormField
+          label="Scan Code"
+          type="text"
+          value={scanCode}
+          onChange={(e) => setScanCode(e.target.value.toUpperCase())}
+          placeholder="e.g., A0S9V9"
+          required
+        />
+        <p style={{ marginTop: '10px', fontSize: '0.9em', color: '#666' }}>
+          Enter the scan code that was provided when the appointment was created.
+        </p>
+      </Modal>
     </div>
   );
 };
 
 export default RadiologyViewer;
+
+
+
 

@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
-import FormField from '../../components/common/FormField';
 import api from '../../services/api';
 import '../../styles/pages/UserProfile.css';
 

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import Card from '../../components/common/Card';
-import Button from '../../components/common/Button';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import '../../styles/pages/Dashboard.css';

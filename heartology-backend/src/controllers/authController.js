@@ -7,11 +7,17 @@ const jwt = require('jsonwebtoken');
 const register = async (req, res) => {
   try {
     const {
-      email, password, role, firstName, lastName, phone, gender, dateOfBirth, address, ssn
+      email, password, uid, role, firstName, lastName, phone, gender, dateOfBirth, address, ssn
     } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ success: false, message: 'Email and Password are required' });
+    // Support both Firebase Auth (uid) and traditional (password) registration
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Email is required' });
+    }
+
+    // If using Firebase Auth, uid is required. Otherwise, password is required.
+    if (!uid && !password) {
+      return res.status(400).json({ success: false, message: 'Either uid (Firebase) or password is required' });
     }
 
     // Check if user already exists
@@ -20,16 +26,28 @@ const register = async (req, res) => {
       return res.status(400).json({ success: false, message: 'User already exists' });
     }
 
-    // Hash Password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
+    // If uid is provided (Firebase Auth), check if user with this uid already exists
+    if (uid) {
+      const uidQuery = await db.collection('users').where('uid', '==', uid).get();
+      if (!uidQuery.empty) {
+        return res.status(400).json({ success: false, message: 'User with this Firebase UID already exists' });
+      }
+    }
+
+    // Hash Password only if password is provided (not using Firebase Auth)
+    let hashedPassword = null;
+    if (password) {
+      const salt = await bcrypt.genSalt(10);
+      hashedPassword = await bcrypt.hash(password, salt);
+    }
 
     const newUser = {
       email,
-      password: hashedPassword,
+      ...(hashedPassword && { password: hashedPassword }), // Only include password if it was hashed
+      ...(uid && { uid: uid }), // Include uid if provided (Firebase Auth)
       role: role || 'patient',
-      firstName,
-      lastName,
+      firstName: firstName || '',
+      lastName: lastName || '',
       phone: phone || '',
       gender: gender || 'Other',
       dateOfBirth: dateOfBirth || null,
@@ -43,7 +61,8 @@ const register = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: 'User registered successfully. Please login.'
+      message: 'User registered successfully. Please login.',
+      data: { id: docRef.id }
     });
 
   } catch (error) {
@@ -55,33 +74,52 @@ const register = async (req, res) => {
 // @route   POST /api/auth/login
 const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, uid } = req.body;
 
-    // Validate email & password
-    if (!email || !password) {
-      return res.status(400).json({ success: false, message: 'Please provide an email and password' });
+    // Support both Firebase Auth (uid) and traditional (password) login
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Email is required' });
     }
 
-    // Check for user
-    const userQuery = await db.collection('users').where('email', '==', email).get();
-
-    if (userQuery.empty) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    // If using Firebase Auth, uid is required. Otherwise, password is required.
+    if (!uid && !password) {
+      return res.status(400).json({ success: false, message: 'Either uid (Firebase) or password is required' });
     }
 
-    const userDoc = userQuery.docs[0];
-    const user = userDoc.data();
+    let userQuery;
+    let userDoc;
+    let user;
 
-    // Check if password exists (some seeded users might not have it if seeded differently, but seed_v2 added it)
-    if (!user.password) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials (no password set)' });
-    }
+    // If uid is provided (Firebase Auth), find user by uid
+    if (uid) {
+      userQuery = await db.collection('users').where('uid', '==', uid).get();
+      if (userQuery.empty) {
+        return res.status(401).json({ success: false, message: 'User not found' });
+      }
+      userDoc = userQuery.docs[0];
+      user = userDoc.data();
+    } else {
+      // Traditional login: find by email and verify password
+      userQuery = await db.collection('users').where('email', '==', email).get();
+      
+      if (userQuery.empty) {
+        return res.status(401).json({ success: false, message: 'Invalid credentials' });
+      }
 
-    // Match password
-    const isMatch = await bcrypt.compare(password, user.password);
+      userDoc = userQuery.docs[0];
+      user = userDoc.data();
 
-    if (!isMatch) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+      // Check if password exists
+      if (!user.password) {
+        return res.status(401).json({ success: false, message: 'Invalid credentials (no password set). Please use Firebase Authentication.' });
+      }
+
+      // Match password
+      const isMatch = await bcrypt.compare(password, user.password);
+
+      if (!isMatch) {
+        return res.status(401).json({ success: false, message: 'Invalid credentials' });
+      }
     }
 
     // Create Token

@@ -3,7 +3,7 @@ const { getFirestore } = require('firebase-admin/firestore');
 
 // Load the service account key
 // Make sure the path matches where you saved the file
-const serviceAccount = require('./serviceAccountKey.json');
+const serviceAccount = require('../../serviceAccountKey.json');
 
 if (!admin.apps.length) {
   admin.initializeApp({

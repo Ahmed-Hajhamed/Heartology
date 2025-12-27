@@ -42,14 +42,17 @@ const AppointmentList = () => {
         // 3. Fetch Doctors for name mapping
         const doctorsRes = await api.get('/doctors');
         const doctorsMap = {};
-        doctorsRes.data.data.forEach(d => {
-          doctorsMap[d.id] = `Dr. ${d.name || d.lastName || 'Unknown'}`;
-        });
+        if (doctorsRes.data?.data && Array.isArray(doctorsRes.data.data)) {
+          doctorsRes.data.data.forEach(d => {
+            doctorsMap[d.id] = `Dr. ${d.name || d.lastName || 'Unknown'}`;
+          });
+        }
 
         // 4. Fetch patient names (using personalInfo for better accuracy)
         const patientsRes = await api.get('/patients');
         const patientsMap = {};
-        for (const p of patientsRes.data.data) {
+        if (patientsRes.data?.data && Array.isArray(patientsRes.data.data)) {
+          for (const p of patientsRes.data.data) {
             // Try to get user info for patient name
             try {
                 const userRes = await api.get(`/patients/${p.id}`);
@@ -60,19 +63,23 @@ const AppointmentList = () => {
             } catch {
                 patientsMap[p.id] = 'Unknown';
             }
+          }
         }
 
         // 5. Fetch Invoices to map invoice status to appointments
         const invoicesRes = await api.get('/billing/invoices');
         const invoicesMap = {};
-        invoicesRes.data.data.forEach(inv => {
+        if (invoicesRes.data?.data && Array.isArray(invoicesRes.data.data)) {
+          invoicesRes.data.data.forEach(inv => {
           if (inv.appointmentId) {
             invoicesMap[inv.appointmentId] = inv.status; // 'Pending' or 'Paid'
           }
-        });
+          });
+        }
 
         // 6. Transform Data for Table
-        const mappedData = response.data.data.map(apt => ({
+        const mappedData = (response.data?.data && Array.isArray(response.data.data)) 
+          ? response.data.data.map(apt => ({
           appointmentId: apt.id,
           patientName: patientsMap[apt.patientId] || apt.patientName || 'Unknown',
           doctorName: doctorsMap[apt.doctorId] || 'Unknown',
@@ -82,7 +89,8 @@ const AppointmentList = () => {
           status: apt.status,
           invoiceStatus: invoicesMap[apt.id] || null, // Real invoice status
           rawDate: apt.appointmentDate
-        }));
+        }))
+          : [];
 
         setAppointments(mappedData);
 

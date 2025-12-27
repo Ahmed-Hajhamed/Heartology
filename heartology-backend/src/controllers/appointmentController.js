@@ -1,4 +1,14 @@
 const { db } = require('../config/firebase');
+const https = require('https');
+const http = require('http');
+
+// Predefined scan codes corresponding to the 20 MRI scans in Orthanc
+const VALID_SCAN_CODES = [
+  'A0S9V9', 'A1D0Q7', 'A1D9Z7', 'A1E9Q1', 'A1K2P5',
+  'A1O8Z3', 'A2C0I1', 'A2E3W4', 'A2H5K9', 'A2L1N6',
+  'A2N8V0', 'A3B7E5', 'A3H1O5', 'A3H5R1', 'A3P9V7',
+  'A4A8V9', 'A4B5U4', 'A4B9O6', 'A4J4S4', 'A4K8R4'
+];
 
 // @desc    Get all appointments (Filtered by Role)
 // @route   GET /api/appointments
@@ -76,7 +86,8 @@ const createAppointment = async (req, res) => {
       appointmentTime, 
       duration, 
       type, 
-      reasonForVisit 
+      reasonForVisit,
+      requiredScanCode  // Scan code like "A0S9V9" that doctor specifies
     } = req.body;
 
     // Basic Validation
@@ -104,6 +115,11 @@ const createAppointment = async (req, res) => {
       type: type || 'Consultation',
       reasonForVisit: reasonForVisit || '',
       status: 'Scheduled',
+      // Scan-related fields
+      requiredScanCode: requiredScanCode || null,  // Code like "A0S9V9"
+      scanStudyInstanceUID: null,  // Will be set when scan is completed
+      scanStudyId: null,  // Orthanc study ID
+      scanStatus: requiredScanCode ? 'pending' : null,  // 'pending', 'completed', null
       createdAt: new Date().toISOString()
     };
 
@@ -170,9 +186,338 @@ const updateAppointmentStatus = async (req, res) => {
   }
 };
 
+// @desc    Update appointment (general update endpoint)
+// @route   PATCH /api/appointments/:id
+// @access  Private
+const updateAppointment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+
+    const apptRef = db.collection('appointments').doc(id);
+    const doc = await apptRef.get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ success: false, message: 'Appointment not found' });
+    }
+
+    // Security check: Ensure user is allowed to update this appointment
+    const appointment = doc.data();
+    if (req.user.role === 'patient') {
+      const pQuery = await db.collection('patients').where('userId', '==', req.user.id).get();
+      if (pQuery.empty || appointment.patientId !== pQuery.docs[0].id) {
+        return res.status(403).json({ success: false, message: 'Not authorized to update this appointment' });
+      }
+    } else if (req.user.role === 'doctor') {
+      const dQuery = await db.collection('doctors').where('userId', '==', req.user.id).get();
+      if (dQuery.empty || appointment.doctorId !== dQuery.docs[0].id) {
+        return res.status(403).json({ success: false, message: 'Not authorized to update this appointment' });
+      }
+    }
+
+    // Remove fields that shouldn't be updated directly
+    delete updateData.id;
+    delete updateData.createdAt;
+
+    // Add updatedAt timestamp
+    updateData.updatedAt = new Date().toISOString();
+
+    // Update the appointment
+    await apptRef.update(updateData);
+
+    // Fetch updated appointment
+    const updatedDoc = await apptRef.get();
+    const updatedAppointment = { id: updatedDoc.id, ...updatedDoc.data() };
+
+    res.status(200).json({
+      success: true,
+      message: 'Appointment updated successfully',
+      data: updatedAppointment
+    });
+  } catch (error) {
+    console.error("Update Appointment Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Link scan to appointment (called when scan is completed in radiology)
+// @route   PATCH /api/appointments/:id/link-scan
+// @access  Private (Staff/Admin/Radiology)
+const linkScanToAppointment = async (req, res) => {
+  try {
+    const { scanStudyInstanceUID, scanStudyId, scanCode } = req.body;
+    const { id } = req.params;
+
+    if (!scanStudyInstanceUID && !scanStudyId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Please provide either scanStudyInstanceUID or scanStudyId' 
+      });
+    }
+
+    const apptRef = db.collection('appointments').doc(id);
+    const doc = await apptRef.get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ success: false, message: 'Appointment not found' });
+    }
+
+    const appointment = doc.data();
+
+    // Optional: Verify scan code matches if provided
+    if (scanCode && appointment.requiredScanCode && scanCode !== appointment.requiredScanCode) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Scan code does not match the required scan code for this appointment' 
+      });
+    }
+
+    // Update appointment with scan information
+    const updateData = {
+      scanStudyInstanceUID: scanStudyInstanceUID || null,
+      scanStudyId: scanStudyId || null,
+      scanStatus: 'completed',
+      scanLinkedAt: new Date().toISOString()
+    };
+
+    await apptRef.update(updateData);
+
+    res.status(200).json({ 
+      success: true, 
+      message: 'Scan linked to appointment successfully',
+      data: { id, ...appointment, ...updateData } 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Assign scan to appointment (for doctors to assign a scan when viewing appointment)
+// @route   PATCH /api/appointments/:id/assign-scan
+// @access  Private (Doctor)
+const assignScanToAppointment = async (req, res) => {
+  try {
+    const { scanStudyInstanceUID, scanStudyId, scanCode } = req.body;
+    const { id } = req.params;
+
+    if (!scanStudyInstanceUID && !scanStudyId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Please provide either scanStudyInstanceUID or scanStudyId' 
+      });
+    }
+
+    // Verify user is a doctor
+    if (req.user.role !== 'doctor') {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Only doctors can assign scans to appointments' 
+      });
+    }
+
+    const apptRef = db.collection('appointments').doc(id);
+    const doc = await apptRef.get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ success: false, message: 'Appointment not found' });
+    }
+
+    const appointment = doc.data();
+
+    // Verify the doctor owns this appointment
+    const doctorQuery = await db.collection('doctors').where('userId', '==', req.user.id).get();
+    if (doctorQuery.empty || appointment.doctorId !== doctorQuery.docs[0].id) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'You can only assign scans to your own appointments' 
+      });
+    }
+
+    // Determine the scan code - must be provided or match study ID
+    let finalScanCode = scanCode || appointment.requiredScanCode;
+    
+    // If scan code is provided in request, use it
+    if (scanCode) {
+      // Validate that the scan code is one of the valid codes
+      if (!VALID_SCAN_CODES.includes(scanCode)) {
+        return res.status(400).json({ 
+          success: false, 
+          message: `Invalid scan code. Must be one of: ${VALID_SCAN_CODES.join(', ')}` 
+        });
+      }
+      finalScanCode = scanCode;
+    } else if (scanStudyId && VALID_SCAN_CODES.includes(scanStudyId)) {
+      // If study ID matches a valid code, use it
+      finalScanCode = scanStudyId;
+    } else if (!finalScanCode) {
+      // If no scan code exists and can't be determined, require it
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Scan code is required. Please provide one of the valid scan codes.',
+        validCodes: VALID_SCAN_CODES
+      });
+    }
+    
+    // Final validation
+    if (!VALID_SCAN_CODES.includes(finalScanCode)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Invalid scan code. Must be one of: ${VALID_SCAN_CODES.join(', ')}` 
+      });
+    }
+
+    // Update appointment with scan information
+    const updateData = {
+      scanStudyInstanceUID: scanStudyInstanceUID || null,
+      scanStudyId: scanStudyId || null,
+      requiredScanCode: finalScanCode,
+      scanStatus: 'completed',
+      scanLinkedAt: new Date().toISOString(),
+      scanAssignedBy: req.user.id,
+      scanAssignedAt: new Date().toISOString()
+    };
+
+    await apptRef.update(updateData);
+
+    res.status(200).json({ 
+      success: true, 
+      message: 'Scan assigned to appointment successfully',
+      data: { id, ...appointment, ...updateData } 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Helper function to make HTTP requests
+const makeHttpRequest = (url) => {
+  return new Promise((resolve, reject) => {
+    const urlObj = new URL(url);
+    const protocol = urlObj.protocol === 'https:' ? https : http;
+    
+    const options = {
+      hostname: urlObj.hostname,
+      port: urlObj.port || (urlObj.protocol === 'https:' ? 443 : 80),
+      path: urlObj.pathname + urlObj.search,
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json'
+      }
+    };
+
+    const req = protocol.request(options, (res) => {
+      let data = '';
+
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          try {
+            resolve(JSON.parse(data));
+          } catch (e) {
+            reject(new Error('Failed to parse JSON response'));
+          }
+        } else {
+          reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage}`));
+        }
+      });
+    });
+
+    req.on('error', (error) => {
+      reject(error);
+    });
+
+    req.end();
+  });
+};
+
+// @desc    Get all available studies from Orthanc
+// @route   GET /api/appointments/available-scans
+// @access  Private (Doctor)
+const getAvailableScans = async (req, res) => {
+  try {
+    // Verify user is a doctor
+    if (req.user.role !== 'doctor') {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Only doctors can view available scans' 
+      });
+    }
+
+    const orthancUrl = process.env.ORTHANC_URL || 'http://localhost:8042';
+    
+    try {
+      // Fetch all studies from Orthanc
+      const studies = await makeHttpRequest(`${orthancUrl}/studies?expand`);
+      
+      // Get all appointments to check which scan codes are already used
+      const appointmentsSnapshot = await db.collection('appointments').get();
+      const usedScanCodes = new Set();
+      appointmentsSnapshot.forEach(doc => {
+        const apt = doc.data();
+        if (apt.requiredScanCode && VALID_SCAN_CODES.includes(apt.requiredScanCode)) {
+          usedScanCodes.add(apt.requiredScanCode);
+        }
+      });
+      
+      // Format studies for frontend and match them to valid scan codes
+      const formattedStudies = studies.map(study => {
+        // Try to match the study ID to a valid scan code
+        // The study ID in Orthanc should match one of the scan code directory names
+        let matchedScanCode = null;
+        if (VALID_SCAN_CODES.includes(study.ID)) {
+          matchedScanCode = study.ID;
+        }
+        
+        return {
+          id: study.ID,
+          studyInstanceUID: study.MainDicomTags?.StudyInstanceUID || study.ID,
+          studyDate: study.MainDicomTags?.StudyDate,
+          studyTime: study.MainDicomTags?.StudyTime,
+          modality: study.MainDicomTags?.ModalitiesInStudy?.[0] || 'Unknown',
+          studyDescription: study.MainDicomTags?.StudyDescription || 'No description',
+          patientName: study.PatientMainDicomTags?.PatientName || 'Unknown',
+          patientId: study.PatientMainDicomTags?.PatientID || 'Unknown',
+          numberOfSeries: study.Series?.length || 0,
+          numberOfInstances: study.Series?.reduce((sum, series) => sum + (series.Instances?.length || 0), 0) || 0,
+          matchedScanCode: matchedScanCode // The scan code that matches this study
+        };
+      });
+
+      // Create list of available and used scan codes
+      const availableScanCodes = VALID_SCAN_CODES.filter(code => !usedScanCodes.has(code));
+      const usedScanCodesList = Array.from(usedScanCodes);
+
+      res.status(200).json({ 
+        success: true, 
+        count: formattedStudies.length,
+        data: formattedStudies,
+        validScanCodes: VALID_SCAN_CODES, // All valid codes
+        availableScanCodes: availableScanCodes, // Codes not yet assigned
+        usedScanCodes: usedScanCodesList // Codes already assigned
+      });
+    } catch (orthancError) {
+      console.error('Error fetching from Orthanc:', orthancError);
+      res.status(500).json({ 
+        success: false, 
+        message: 'Failed to fetch scans from Orthanc. Make sure Orthanc is running and accessible.',
+        error: orthancError.message 
+      });
+    }
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   getAppointments,
   createAppointment,
   getAppointmentById,
-  updateAppointmentStatus
+  updateAppointmentStatus,
+  updateAppointment,
+  linkScanToAppointment,
+  assignScanToAppointment,
+  getAvailableScans
 };

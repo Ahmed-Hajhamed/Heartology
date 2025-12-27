@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../../config/firebase';
 import FormField from '../../components/common/FormField';
 import Button from '../../components/common/Button';
 import api from '../../services/api';
@@ -25,16 +27,25 @@ const Login = ({ setUser }) => {
     setError('');
 
     try {
-      // Call Backend to Login
+      // 1. Authenticate with Firebase Auth first
+      const userCredential = await signInWithEmailAndPassword(auth, formData.email, formData.password);
+      const firebaseUser = userCredential.user;
+
+      // 2. Get Firebase token
+      const firebaseToken = await firebaseUser.getIdToken();
+
+      // 3. Get user profile from backend using Firebase UID
+      // The backend will find the user by uid and return the profile
       const response = await api.post('/auth/login', {
-        email: formData.email,
-        password: formData.password
+        uid: firebaseUser.uid,
+        email: formData.email
       });
 
       if (response.data.success) {
-        const { token, user } = response.data;
+        const { user, token } = response.data;
 
-        // Save Token & User
+        // Save the JWT token from backend (not Firebase token) & User
+        // The backend returns a custom JWT token that the middleware expects
         localStorage.setItem('accessToken', token);
         localStorage.setItem('user', JSON.stringify(user));
 
@@ -62,10 +73,17 @@ const Login = ({ setUser }) => {
       }
     } catch (err) {
       console.error('Login Error:', err);
-      if (err.response && err.response.data && err.response.data.message) {
+      // Handle Firebase Auth errors
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        setError('Invalid email or password');
+      } else if (err.code === 'auth/invalid-email') {
+        setError('Invalid email address');
+      } else if (err.code === 'auth/too-many-requests') {
+        setError('Too many failed attempts. Please try again later.');
+      } else if (err.response && err.response.data && err.response.data.message) {
         setError(err.response.data.message);
       } else {
-        setError('Login failed. Please try again.');
+        setError(err.message || 'Login failed. Please try again.');
       }
     }
   };

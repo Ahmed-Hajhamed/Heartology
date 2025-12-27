@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getPatients, createPatient, getPatientById } = require('../controllers/patientController');
+const { getPatients, createPatient, getPatientById, updatePatient } = require('../controllers/patientController');
 const { protect } = require('../middleware/authMiddleware');
 
 // Protect all routes
@@ -11,6 +11,7 @@ router.route('/')
   .post(createPatient);
 
 router.route('/:id')
-  .get(getPatientById);
+  .get(getPatientById)
+  .patch(updatePatient);
 
 module.exports = router;

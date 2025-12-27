@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import './styles/App.css';
 
@@ -52,11 +52,19 @@ function App() {
   });
 
   const ProtectedRoute = ({ children, allowedRoles }) => {
-    if (!user) {
+    // Check both state and localStorage to avoid race condition
+    // This ensures we don't redirect immediately after login before state updates
+    let currentUser = user;
+    if (!currentUser) {
+      const savedUser = localStorage.getItem('user');
+      currentUser = savedUser ? JSON.parse(savedUser) : null;
+    }
+
+    if (!currentUser) {
       return <Navigate to="/login" replace />;
     }
 
-    if (allowedRoles && !allowedRoles.includes(user.role)) {
+    if (allowedRoles && !allowedRoles.includes(currentUser.role)) {
       return <Navigate to="/unauthorized" replace />;
     }
 
@@ -118,14 +126,14 @@ function App() {
           <Route path="/billing/payment/:invoiceId" element={<ProtectedRoute><PaymentProcessing /></ProtectedRoute>} />
 
           {/* Tools */}
-          <Route path="/icd10" element={<ProtectedRoute><Icd10Lookup /></ProtectedRoute} />
+          <Route path="/icd10" element={<ProtectedRoute><Icd10Lookup /></ProtectedRoute>} />
           
           {/* Radiology */}
-          <Route path="/radiology" element={<ProtectedRoute><RadiologyList /></ProtectedRoute} />
-          <Route path="/radiology/:studyId" element={<ProtectedRoute><RadiologyViewer /></ProtectedRoute} />
+          <Route path="/radiology" element={<ProtectedRoute><RadiologyList /></ProtectedRoute>} />
+          <Route path="/radiology/:studyId" element={<ProtectedRoute><RadiologyViewer /></ProtectedRoute>} />
           
           {/* Reports */}
-          <Route path="/reports" element={<ProtectedRoute allowedRoles={['admin', 'staff']}><Reports /></ProtectedRoute} />
+          <Route path="/reports" element={<ProtectedRoute allowedRoles={['admin', 'staff']}><Reports /></ProtectedRoute>} />
           {/* Default */}
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="/unauthorized" element={<div style={{ padding: '20px' }}>Unauthorized Access</div>} />

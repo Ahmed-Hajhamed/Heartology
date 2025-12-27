@@ -87,9 +87,18 @@ const createPatient = async (req, res) => {
     // 2. Check if Patient Profile already exists for this User
     const existingQuery = await db.collection('patients').where('userId', '==', userId).get();
     if (!existingQuery.empty) {
-      // OPTIONAL: Update instead of fail? For now, let's allow "Create" to overwrite or return ID
+      // Update existing profile
       const docId = existingQuery.docs[0].id;
-      await db.collection('patients').doc(docId).update(req.body);
+      const updateData = { ...req.body };
+      // Preserve pacsPatientId if not provided in update
+      if (!updateData.pacsPatientId && updateData.pacsPatientId !== null) {
+        const existingDoc = await db.collection('patients').doc(docId).get();
+        if (existingDoc.exists && existingDoc.data().pacsPatientId) {
+          updateData.pacsPatientId = existingDoc.data().pacsPatientId;
+        }
+      }
+      updateData.updatedAt = new Date().toISOString();
+      await db.collection('patients').doc(docId).update(updateData);
       return res.status(200).json({ success: true, message: 'Profile Updated', data: { id: docId } });
     }
 
@@ -106,6 +115,7 @@ const createPatient = async (req, res) => {
       alcoholConsumption: alcoholConsumption || 'None',
       insurance: insurance || {},
       emergencyContact: emergencyContact || {},
+      pacsPatientId: null, // PACS integration field
       lastVisit: null,
       createdAt: new Date().toISOString()
     };
@@ -123,4 +133,70 @@ const createPatient = async (req, res) => {
   }
 };
 
-module.exports = { getPatients, getPatientById, createPatient };
+// @desc    Update patient profile
+// @route   PATCH /api/patients/:id
+// @access  Private
+const updatePatient = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+
+    // Get the patient document
+    const patientRef = db.collection('patients').doc(id);
+    const doc = await patientRef.get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ success: false, message: 'Patient profile not found' });
+    }
+
+    // Security check: Ensure user can only update their own patient profile (if patient role)
+    // Or allow admin/staff/doctor to update any patient
+    if (req.user.role === 'patient') {
+      const patientData = doc.data();
+      const patientQuery = await db.collection('patients').where('userId', '==', req.user.id).get();
+      if (patientQuery.empty || patientQuery.docs[0].id !== id) {
+        return res.status(403).json({ success: false, message: 'Not authorized to update this patient profile' });
+      }
+    }
+
+    // Remove fields that shouldn't be updated directly
+    delete updateData.id;
+    delete updateData.userId; // userId should not be changed
+    delete updateData.createdAt; // createdAt should not be changed
+
+    // Add updatedAt timestamp
+    updateData.updatedAt = new Date().toISOString();
+
+    // Update the patient document
+    await patientRef.update(updateData);
+
+    // Fetch updated patient data
+    const updatedDoc = await patientRef.get();
+    const updatedPatientData = updatedDoc.data();
+    const userDoc = await db.collection('users').doc(updatedPatientData.userId).get();
+    const userData = userDoc.exists ? userDoc.data() : {};
+
+    res.status(200).json({
+      success: true,
+      message: 'Patient profile updated successfully',
+      data: {
+        id: updatedDoc.id,
+        ...updatedPatientData,
+        personalInfo: {
+          firstName: userData.firstName,
+          lastName: userData.lastName,
+          email: userData.email,
+          phone: userData.phone,
+          gender: userData.gender,
+          dateOfBirth: userData.dateOfBirth,
+          address: userData.address
+        }
+      }
+    });
+  } catch (error) {
+    console.error("Update Patient Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+module.exports = { getPatients, getPatientById, createPatient, updatePatient };

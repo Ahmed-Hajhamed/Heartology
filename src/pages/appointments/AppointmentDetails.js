@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Modal from '../../components/common/Modal';
+import FormField from '../../components/common/FormField';
 import api from '../../services/api';
 
 const AppointmentDetails = () => {
@@ -15,6 +16,62 @@ const AppointmentDetails = () => {
   const [doctorName, setDoctorName] = useState('Loading...');
   const [loading, setLoading] = useState(true);
   const [showCancelModal, setShowCancelModal] = useState(false);
+  
+  // Scan assignment state (old - keeping for backward compatibility)
+  const [userRole, setUserRole] = useState('');
+  const [showAssignScanModal, setShowAssignScanModal] = useState(false);
+  const [availableScans, setAvailableScans] = useState([]);
+  const [validScanCodes, setValidScanCodes] = useState([]);
+  const [availableScanCodes, setAvailableScanCodes] = useState([]);
+  const [usedScanCodes, setUsedScanCodes] = useState([]);
+  const [loadingScans, setLoadingScans] = useState(false);
+  const [selectedScanId, setSelectedScanId] = useState('');
+  const [selectedScanCode, setSelectedScanCode] = useState('');
+  const [assigningScan, setAssigningScan] = useState(false);
+  
+  // Radiology Order state
+  const [showRadiologyOrderModal, setShowRadiologyOrderModal] = useState(false);
+  const [selectedIndication, setSelectedIndication] = useState('');
+  const [processingOrder, setProcessingOrder] = useState(false);
+  
+  // Study Instance UID arrays for random selection from Orthanc server
+  const NORMAL_HEART_SCANS = [
+    '1.2.826.0.1.3680043.8.498.65932550331660928509262777099721109252',
+    '1.2.826.0.1.3680043.8.498.93860610018678669415400309565886088268',
+    '1.2.826.0.1.3680043.8.498.16230640878550461263592119697880533664',
+    '1.2.826.0.1.3680043.8.498.70493775531032013625068629168153348774',
+    '1.2.826.0.1.3680043.8.498.62909792531251488518012102295631110640',
+    '1.2.826.0.1.3680043.8.498.18036823888686057185019461954698582157',
+    '1.2.826.0.1.3680043.8.498.71805375670784599698576703485251744630',
+    '1.2.826.0.1.3680043.8.498.16745248682361182860928038522938653566',
+    '1.2.826.0.1.3680043.8.498.6498038521325610489020693643369776880',
+    '1.2.826.0.1.3680043.8.498.7022036604774013878789975655574534184'
+  ];
+
+  const PATHOLOGY_SCANS = [
+    '1.2.826.0.1.3680043.8.498.18022695992288037033873592157909703020',
+    '1.2.826.0.1.3680043.8.498.7820599399092157576391313312410202875',
+    '1.2.826.0.1.3680043.8.498.50481687033231048677167096858227352461',
+    '1.2.826.0.1.3680043.8.498.94990454134576571137582239688317624874',
+    '1.2.826.0.1.3680043.8.498.83049522846639332443312661389619858155',
+    '1.2.826.0.1.3680043.8.498.17516516330689793076318675615348960514',
+    '1.2.826.0.1.3680043.8.498.27639721448444283872302994227385374925',
+    '1.2.826.0.1.3680043.8.498.98271428593790177001153501071893376478',
+    '1.2.826.0.1.3680043.8.498.51718206548003017673630543493327578116',
+    '1.2.826.0.1.3680043.8.498.94307292311091491912285978384814594342'
+  ];
+  
+  // Clinical indication options
+  const clinicalIndications = [
+    { value: 'routine', label: 'Routine Checkup' },
+    { value: 'hypertrophy', label: 'Hypertrophy/Pathology' }
+  ];
+
+  useEffect(() => {
+    // Get user role from localStorage
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    setUserRole(user.role || '');
+  }, []);
 
   useEffect(() => {
     const fetchDetails = async () => {
@@ -43,8 +100,12 @@ const AppointmentDetails = () => {
         if (apptData.doctorId) {
           try {
             const dRes = await api.get(`/doctors/${apptData.doctorId}`);
-            const dData = dRes.data.data;
-            setDoctorName(`Dr. ${dData.firstName} ${dData.lastName}`);
+            const dData = dRes.data?.data;
+            if (dData) {
+              setDoctorName(`Dr. ${dData.firstName || ''} ${dData.lastName || ''}`.trim() || 'Unknown Doctor');
+            } else {
+              setDoctorName('Unknown Doctor');
+            }
           } catch (err) {
             setDoctorName('Unknown Doctor');
           }
@@ -88,6 +149,133 @@ const AppointmentDetails = () => {
     } catch (error) {
       console.error(error);
       alert(error.response?.data?.message || 'Failed to update status.');
+    }
+  };
+
+  // Handle submitting radiology order
+  const handleSubmitRadiologyOrder = async () => {
+    if (!selectedIndication) {
+      alert('Please select a clinical indication.');
+      return;
+    }
+
+    setProcessingOrder(true);
+
+    // Simulate processing delay (1.5 seconds)
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    try {
+      let selectedStudyId = null;
+
+      // Randomly select a study ID based on clinical indication
+      if (selectedIndication === 'routine') {
+        // Randomly pick from NORMAL_HEART_SCANS
+        const randomIndex = Math.floor(Math.random() * NORMAL_HEART_SCANS.length);
+        selectedStudyId = NORMAL_HEART_SCANS[randomIndex];
+      } else if (selectedIndication === 'hypertrophy') {
+        // Randomly pick from PATHOLOGY_SCANS
+        const randomIndex = Math.floor(Math.random() * PATHOLOGY_SCANS.length);
+        selectedStudyId = PATHOLOGY_SCANS[randomIndex];
+      }
+
+      if (!selectedStudyId) {
+        throw new Error('Failed to select a study ID');
+      }
+
+      // Get the indication label
+      const indicationLabel = clinicalIndications.find(ind => ind.value === selectedIndication)?.label || selectedIndication;
+
+      // Update appointment with radiology order
+      await api.patch(`/appointments/${appointmentId}`, {
+        radiologyOrder: {
+          status: 'completed',
+          indication: indicationLabel,
+          pacsStudyId: selectedStudyId,
+          orderedAt: new Date().toISOString()
+        }
+      });
+
+      // Close modal and refresh appointment data
+      setShowRadiologyOrderModal(false);
+      setSelectedIndication('');
+      
+      // Refresh appointment data
+      const apptRes = await api.get(`/appointments/${appointmentId}`);
+      setAppointment(apptRes.data.data);
+      
+      alert('Radiology order submitted successfully! Scan has been assigned to this appointment.');
+    } catch (error) {
+      console.error('Error submitting radiology order:', error);
+      alert(error.response?.data?.message || 'Failed to submit radiology order.');
+    } finally {
+      setProcessingOrder(false);
+    }
+  };
+
+  // Fetch available scans from Orthanc
+  const fetchAvailableScans = async () => {
+    setLoadingScans(true);
+    try {
+      const response = await api.get('/appointments/available-scans');
+      setAvailableScans(response.data.data || []);
+      setValidScanCodes(response.data.validScanCodes || []);
+      setAvailableScanCodes(response.data.availableScanCodes || []);
+      setUsedScanCodes(response.data.usedScanCodes || []);
+    } catch (error) {
+      console.error('Error fetching available scans:', error);
+      alert(error.response?.data?.message || 'Failed to fetch available scans.');
+      setAvailableScans([]);
+      setValidScanCodes([]);
+    } finally {
+      setLoadingScans(false);
+    }
+  };
+
+  // Handle opening assign scan modal
+  const handleOpenAssignScanModal = () => {
+    setShowAssignScanModal(true);
+    setSelectedScanId('');
+    setSelectedScanCode('');
+    fetchAvailableScans();
+  };
+
+  // Handle assigning scan to appointment
+  const handleAssignScan = async () => {
+    if (!selectedScanId) {
+      alert('Please select a scan to assign.');
+      return;
+    }
+
+    if (!selectedScanCode) {
+      alert('Please select a scan code.');
+      return;
+    }
+
+    setAssigningScan(true);
+    try {
+      const selectedScan = availableScans.find(scan => scan.id === selectedScanId);
+      if (!selectedScan) {
+        alert('Selected scan not found.');
+        setAssigningScan(false);
+        return;
+      }
+
+      await api.patch(`/appointments/${appointmentId}/assign-scan`, {
+        scanStudyInstanceUID: selectedScan.studyInstanceUID,
+        scanStudyId: selectedScan.id,
+        scanCode: selectedScanCode
+      });
+
+      alert('Scan assigned to appointment successfully!');
+      setShowAssignScanModal(false);
+      // Refresh appointment data
+      const apptRes = await api.get(`/appointments/${appointmentId}`);
+      setAppointment(apptRes.data.data);
+    } catch (error) {
+      console.error('Error assigning scan:', error);
+      alert(error.response?.data?.message || 'Failed to assign scan to appointment.');
+    } finally {
+      setAssigningScan(false);
     }
   };
 
@@ -187,6 +375,71 @@ const AppointmentDetails = () => {
           </Card>
         )}
 
+        {/* Radiology Section */}
+        <Card title="Radiology">
+          {!appointment.radiologyOrder ? (
+            <div>
+              <p style={{ marginBottom: '15px', color: '#666' }}>
+                Order a radiology scan for this appointment. The system will automatically assign an appropriate study based on the clinical indication.
+              </p>
+              <Button 
+                onClick={() => setShowRadiologyOrderModal(true)}
+                variant="primary"
+              >
+                Order Scan
+              </Button>
+            </div>
+          ) : (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
+                <span className="status status-completed" style={{ padding: '5px 10px', borderRadius: '4px', fontSize: '0.9em' }}>
+                  {appointment.radiologyOrder.status === 'completed' ? 'Completed' : 'Ordered'}
+                </span>
+                <span style={{ color: '#666', fontSize: '0.9em' }}>
+                  Order: <strong>{appointment.radiologyOrder.indication}</strong>
+                  {appointment.radiologyOrder.status === 'completed' && ' - Completed'}
+                </span>
+              </div>
+              {appointment.radiologyOrder.pacsStudyId && (
+                <div style={{ marginBottom: '15px' }}>
+                  <span style={{ color: '#666', fontSize: '0.9em' }}>
+                    Study ID: <strong style={{ fontFamily: 'monospace' }}>{appointment.radiologyOrder.pacsStudyId}</strong>
+                  </span>
+                </div>
+              )}
+              {appointment.radiologyOrder.status === 'completed' && appointment.radiologyOrder.pacsStudyId && (
+                <div style={{ marginTop: '15px' }}>
+                  <Button 
+                    onClick={() => {
+                      // Use StudyInstanceUIDs parameter to open only the specific scan directly in the viewer
+                      // This bypasses the Study List and opens the viewer directly for this specific scan
+                      const pacsStudyId = appointment.radiologyOrder.pacsStudyId;
+                      
+                      // Validate that we have a real Study Instance UID (not a mock ID)
+                      if (!pacsStudyId || pacsStudyId.length < 20 || !pacsStudyId.includes('.')) {
+                        alert(
+                          `⚠️ Invalid Study Instance UID detected!\n\n` +
+                          `The stored ID "${pacsStudyId}" appears to be a mock ID.\n\n` +
+                          `Please create a new radiology order for this appointment to assign a real Study Instance UID from Orthanc.`
+                        );
+                        return;
+                      }
+                      
+                      const ohifUrl = `http://localhost:3000/viewer?StudyInstanceUIDs=${encodeURIComponent(pacsStudyId)}`;
+                      console.log('Opening OHIF viewer with Study Instance UID:', pacsStudyId);
+                      console.log('Full URL:', ohifUrl);
+                      window.open(ohifUrl, '_blank');
+                    }}
+                    variant="primary"
+                  >
+                    View Scan Results
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
+
         {/* Show Invoice section for Completed appointments */}
         {appointment.status === 'Completed' && (
           <Card title="💳 Billing">
@@ -209,6 +462,205 @@ const AppointmentDetails = () => {
       >
         <p>Are you sure you want to cancel this appointment?</p>
         <p>This action cannot be undone.</p>
+      </Modal>
+
+      {/* Assign Scan Modal */}
+      <Modal
+        isOpen={showAssignScanModal}
+        onClose={() => setShowAssignScanModal(false)}
+        title="Assign Scan to Appointment"
+        footer={
+          <>
+            <Button 
+              onClick={handleAssignScan}
+              disabled={assigningScan || !selectedScanId || !selectedScanCode || loadingScans}
+            >
+              {assigningScan ? 'Assigning...' : 'Assign Scan'}
+            </Button>
+            <Button variant="secondary" onClick={() => setShowAssignScanModal(false)}>Cancel</Button>
+          </>
+        }
+      >
+        {loadingScans ? (
+          <p>Loading available scans...</p>
+        ) : availableScans.length === 0 ? (
+          <div>
+            <p style={{ color: '#666', marginBottom: '15px' }}>
+              No scans available. Make sure Orthanc is running and has studies loaded.
+            </p>
+            <Button variant="secondary" onClick={fetchAvailableScans}>Retry</Button>
+          </div>
+        ) : (
+          <div>
+            <FormField
+              label="Select Scan Code"
+              type="select"
+              value={selectedScanCode}
+              onChange={(e) => setSelectedScanCode(e.target.value)}
+              options={[
+                { value: '', label: '-- Select a scan code --' },
+                ...validScanCodes.map(code => {
+                  const isAvailable = availableScanCodes.includes(code);
+                  const isUsed = usedScanCodes.includes(code);
+                  return {
+                    value: code,
+                    label: `${code}${isUsed ? ' (Already Used)' : isAvailable ? ' (Available)' : ''}`
+                  };
+                })
+              ]}
+              required
+            />
+            <p style={{ marginTop: '5px', fontSize: '0.9em', color: '#666' }}>
+              Select one of the 20 predefined scan codes that corresponds to the MRI scan.
+            </p>
+            {availableScanCodes.length > 0 && (
+              <p style={{ marginTop: '5px', fontSize: '0.85em', color: '#28a745' }}>
+                Available codes: {availableScanCodes.join(', ')}
+              </p>
+            )}
+            {usedScanCodes.length > 0 && (
+              <p style={{ marginTop: '5px', fontSize: '0.85em', color: '#dc3545' }}>
+                Used codes: {usedScanCodes.join(', ')}
+              </p>
+            )}
+            
+            <FormField
+              label="Select Scan from Orthanc"
+              type="select"
+              value={selectedScanId}
+              onChange={(e) => setSelectedScanId(e.target.value)}
+              options={[
+                { value: '', label: '-- Select a scan --' },
+                ...availableScans.map(scan => ({
+                  value: scan.id,
+                  label: `${scan.modality} - ${scan.studyDescription} (${scan.studyDate || 'No date'}) - Patient: ${scan.patientName}${scan.matchedScanCode ? ` [Code: ${scan.matchedScanCode}]` : ''}`
+                }))
+              ]}
+              required
+              style={{ marginTop: '15px' }}
+            />
+            
+            {selectedScanId && (
+              <div style={{ marginTop: '15px', padding: '10px', backgroundColor: '#f5f5f5', borderRadius: '4px' }}>
+                {(() => {
+                  const selected = availableScans.find(s => s.id === selectedScanId);
+                  return selected ? (
+                    <div>
+                      <p><strong>Study ID:</strong> {selected.id}</p>
+                      <p><strong>Modality:</strong> {selected.modality}</p>
+                      <p><strong>Description:</strong> {selected.studyDescription}</p>
+                      <p><strong>Date:</strong> {selected.studyDate || 'N/A'}</p>
+                      <p><strong>Patient:</strong> {selected.patientName}</p>
+                      <p><strong>Series:</strong> {selected.numberOfSeries}</p>
+                      <p><strong>Instances:</strong> {selected.numberOfInstances}</p>
+                      {selected.matchedScanCode && (
+                        <p style={{ marginTop: '10px', padding: '5px', backgroundColor: '#e8f5e9', borderRadius: '3px' }}>
+                          <strong>Matched Code:</strong> {selected.matchedScanCode}
+                        </p>
+                      )}
+                    </div>
+                  ) : null;
+                })()}
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+
+      {/* Radiology Order Modal */}
+      <Modal
+        isOpen={showRadiologyOrderModal}
+        onClose={() => !processingOrder && setShowRadiologyOrderModal(false)}
+        title="Order Radiology Scan"
+        footer={
+          <>
+            <Button 
+              onClick={handleSubmitRadiologyOrder}
+              disabled={!selectedIndication || processingOrder}
+              variant="primary"
+            >
+              {processingOrder ? 'Processing...' : 'Submit Order'}
+            </Button>
+            <Button 
+              variant="secondary" 
+              onClick={() => setShowRadiologyOrderModal(false)}
+              disabled={processingOrder}
+            >
+              Cancel
+            </Button>
+          </>
+        }
+      >
+        <div>
+          <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold', fontSize: '0.95em' }}>
+            Select Scan Indication:
+          </label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
+            {clinicalIndications.map((indication) => (
+              <div
+                key={indication.value}
+                onClick={() => !processingOrder && setSelectedIndication(indication.value)}
+                style={{
+                  padding: '15px',
+                  border: `2px solid ${selectedIndication === indication.value ? '#0066cc' : '#e0e0e0'}`,
+                  borderRadius: '8px',
+                  cursor: processingOrder ? 'not-allowed' : 'pointer',
+                  backgroundColor: selectedIndication === indication.value ? '#f0f7ff' : '#fff',
+                  transition: 'all 0.2s',
+                  opacity: processingOrder ? 0.6 : 1
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div
+                    style={{
+                      width: '20px',
+                      height: '20px',
+                      borderRadius: '50%',
+                      border: `2px solid ${selectedIndication === indication.value ? '#0066cc' : '#ccc'}`,
+                      backgroundColor: selectedIndication === indication.value ? '#0066cc' : '#fff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}
+                  >
+                    {selectedIndication === indication.value && (
+                      <div
+                        style={{
+                          width: '10px',
+                          height: '10px',
+                          borderRadius: '50%',
+                          backgroundColor: '#fff'
+                        }}
+                      />
+                    )}
+                  </div>
+                  <span style={{ fontSize: '0.95em', fontWeight: selectedIndication === indication.value ? '600' : '400' }}>
+                    {indication.label}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+          
+          {processingOrder && (
+            <div style={{ marginTop: '15px', padding: '15px', backgroundColor: '#f0f7ff', borderRadius: '4px', textAlign: 'center' }}>
+              <p style={{ margin: 0, color: '#0066cc' }}>
+                Processing order and assigning scan...
+              </p>
+            </div>
+          )}
+          
+          {selectedIndication && !processingOrder && (
+            <div style={{ marginTop: '15px', padding: '15px', backgroundColor: '#f5f5f5', borderRadius: '4px', fontSize: '0.9em' }}>
+              <p style={{ margin: '0 0 5px 0', fontWeight: 'bold' }}>Order Summary:</p>
+              <p style={{ margin: 0, color: '#666' }}>
+                <strong>Procedure:</strong> Cardiac MRI<br />
+                <strong>Indication:</strong> {clinicalIndications.find(ind => ind.value === selectedIndication)?.label}
+              </p>
+            </div>
+          )}
+        </div>
       </Modal>
     </div>
   );
