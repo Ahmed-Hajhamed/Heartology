@@ -15,6 +15,22 @@ const register = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Email is required' });
     }
 
+    // Validate email based on role (for demonstration)
+    const userRole = role || 'patient';
+    if (userRole === 'doctor' && !email.endsWith('@hospital.com')) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Doctors must register with a @hospital.com email address' 
+      });
+    }
+    if (userRole === 'staff' && !email.endsWith('@staff.com')) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Staff must register with a @staff.com email address' 
+      });
+    }
+    // Patients and admins can use any email
+
     // If using Firebase Auth, uid is required. Otherwise, password is required.
     if (!uid && !password) {
       return res.status(400).json({ success: false, message: 'Either uid (Firebase) or password is required' });

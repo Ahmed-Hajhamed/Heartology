@@ -152,7 +152,11 @@ const Register = () => {
             name="email"
             value={formData.email}
             onChange={handleChange}
-            placeholder="Enter email"
+            placeholder={
+              formData.role === 'doctor' ? 'name@hospital.com' :
+              formData.role === 'staff' ? 'name@staff.com' :
+              'Enter email'
+            }
             required
           />
           
@@ -168,6 +172,18 @@ const Register = () => {
             required
           />
         </div>
+        
+        {/* Email Format Helper */}
+        {formData.role === 'doctor' && (
+          <div style={{color: '#2c5f7c', fontSize: '0.875rem', marginTop: '-0.5rem', marginBottom: '1rem'}}>
+            ℹ️ Doctors must use @hospital.com email
+          </div>
+        )}
+        {formData.role === 'staff' && (
+          <div style={{color: '#2c5f7c', fontSize: '0.875rem', marginTop: '-0.5rem', marginBottom: '1rem'}}>
+            ℹ️ Staff must use @staff.com email
+          </div>
+        )}
 
         <div className="form-row">
           <FormField
