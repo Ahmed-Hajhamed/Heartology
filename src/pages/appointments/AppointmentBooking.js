@@ -13,6 +13,7 @@ const AppointmentBooking = () => {
   const [patientId, setPatientId] = useState(null);
   const [userRole, setUserRole] = useState('');
   const [availabilityError, setAvailabilityError] = useState('');
+  const [selectedDoctor, setSelectedDoctor] = useState(null);
 
   const [formData, setFormData] = useState({
     doctorId: '',
@@ -82,10 +83,21 @@ const AppointmentBooking = () => {
   }, [navigate]);
 
   const handleChange = (e) => {
+    const { name, value } = e.target;
+    
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value
+      [name]: value
     });
+    
+    // When doctor is selected, find and store the doctor details
+    if (name === 'doctorId' && value) {
+      const doctor = doctors.find(d => d.id === value);
+      setSelectedDoctor(doctor);
+    } else if (name === 'doctorId' && !value) {
+      setSelectedDoctor(null);
+    }
+    
     // Clear availability error when user changes selection
     setAvailabilityError('');
   };
@@ -249,6 +261,48 @@ const AppointmentBooking = () => {
               ]}
               required
             />
+
+            {/* Doctor Availability Info */}
+            {selectedDoctor && (
+              <div style={{
+                gridColumn: '1 / -1',
+                padding: '15px',
+                background: '#f0f8ff',
+                border: '1px solid #2c5f7c',
+                borderRadius: '4px',
+                marginBottom: '10px'
+              }}>
+                <h4 style={{margin: '0 0 10px 0', color: '#2c5f7c'}}>
+                  📅 Dr. {selectedDoctor.name || selectedDoctor.lastName}'s Schedule
+                </h4>
+                <div style={{display: 'grid', gap: '10px'}}>
+                  <div>
+                    <strong>Working Days:</strong> {
+                      selectedDoctor.workingDays && selectedDoctor.workingDays.length > 0
+                        ? selectedDoctor.workingDays.join(', ')
+                        : 'Not specified'
+                    }
+                  </div>
+                  <div>
+                    <strong>Working Hours:</strong> {
+                      selectedDoctor.workingHours && selectedDoctor.workingHours.start && selectedDoctor.workingHours.end
+                        ? `${selectedDoctor.workingHours.start} - ${selectedDoctor.workingHours.end}`
+                        : 'Not specified'
+                    }
+                  </div>
+                  {selectedDoctor.availability && (
+                    <div>
+                      <strong>Status:</strong> <span style={{
+                        color: selectedDoctor.availability === 'Available' ? '#5cb85c' : '#f0ad4e',
+                        fontWeight: 'bold'
+                      }}>
+                        {selectedDoctor.availability}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="form-row">
               <FormField

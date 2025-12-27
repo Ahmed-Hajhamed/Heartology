@@ -10,6 +10,7 @@ const DoctorDashboard = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [doctorProfile, setDoctorProfile] = useState(null);
+  const [doctorName, setDoctorName] = useState('');
   const [appointments, setAppointments] = useState([]);
   const [stats, setStats] = useState({ today: 0, pending: 0, totalPatients: 0 });
 
@@ -24,6 +25,9 @@ const DoctorDashboard = () => {
     const fetchDashboardData = async () => {
       try {
         const user = JSON.parse(localStorage.getItem('user'));
+        
+        // Set doctor name from logged-in user
+        setDoctorName(`${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Doctor');
 
         // 1. Check for Doctor Profile
         const docRes = await api.get('/doctors');
@@ -134,7 +138,7 @@ const DoctorDashboard = () => {
     <div className="dashboard">
       <div className="dashboard-header">
         <h1>Doctor Dashboard</h1>
-        <p>Welcome, Dr. {doctorProfile.lastName}</p>
+        <p>Welcome, Dr. {doctorName}</p>
       </div>
 
       <div className="dashboard-stats">
