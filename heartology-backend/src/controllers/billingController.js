@@ -1,5 +1,36 @@
 const { db } = require('../config/firebase');
 
+// Helper function to update radiology order status when invoice is paid
+const updateRadiologyOrderOnPayment = async (appointmentId) => {
+    try {
+        const apptRef = db.collection('appointments').doc(appointmentId);
+        const apptDoc = await apptRef.get();
+
+        if (!apptDoc.exists) {
+            console.log(`Appointment ${appointmentId} not found when updating radiology order`);
+            return;
+        }
+
+        const appointment = apptDoc.data();
+
+        // Check if appointment has a radiology order with status 'ordered'
+        if (appointment.radiologyOrder && appointment.radiologyOrder.status === 'ordered') {
+            // Update radiology order status to completed
+            await apptRef.update({
+                radiologyOrder: {
+                    ...appointment.radiologyOrder,
+                    status: 'completed'
+                },
+                updatedAt: new Date().toISOString()
+            });
+            console.log(`Radiology order marked as completed for appointment ${appointmentId}`);
+        }
+    } catch (error) {
+        console.error(`Error updating radiology order for appointment ${appointmentId}:`, error);
+        // Don't throw error - payment should still succeed even if radiology order update fails
+    }
+};
+
 // @desc    Get all invoices
 // @route   GET /api/billing/invoices
 // @access  Private (Admin/Staff)
@@ -110,11 +141,19 @@ const updateInvoice = async (req, res) => {
         };
 
         // If marking as paid, set paidAt
-        if (req.body.status === 'Paid' && !doc.data().paidAt) {
+        const invoiceData = doc.data();
+        const isBeingMarkedAsPaid = req.body.status === 'Paid' && invoiceData.status !== 'Paid';
+        
+        if (isBeingMarkedAsPaid && !invoiceData.paidAt) {
             updates.paidAt = new Date().toISOString();
         }
 
         await invoiceRef.update(updates);
+
+        // If invoice is being marked as paid (transitioning from unpaid to paid) and has an appointmentId, update radiology order
+        if (isBeingMarkedAsPaid && invoiceData.appointmentId) {
+            await updateRadiologyOrderOnPayment(invoiceData.appointmentId);
+        }
 
         res.status(200).json({ success: true, message: 'Invoice updated successfully' });
     } catch (error) {
@@ -155,6 +194,11 @@ const processPayment = async (req, res) => {
         };
 
         await invoiceRef.update(updates);
+
+        // If invoice is linked to an appointment, update radiology order status
+        if (invoice.appointmentId) {
+            await updateRadiologyOrderOnPayment(invoice.appointmentId);
+        }
 
         res.status(200).json({
             success: true,
