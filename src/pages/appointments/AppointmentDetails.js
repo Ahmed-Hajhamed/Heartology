@@ -185,12 +185,13 @@ const AppointmentDetails = () => {
       // Get the indication label
       const indicationLabel = clinicalIndications.find(ind => ind.value === selectedIndication)?.label || selectedIndication;
 
-      // Update appointment with radiology order
+      // Update appointment with radiology order - status is 'ordered' (unpaid) initially
       await api.patch(`/appointments/${appointmentId}`, {
         radiologyOrder: {
-          status: 'completed',
+          status: 'ordered',
           indication: indicationLabel,
           pacsStudyId: selectedStudyId,
+          cost: 200,
           orderedAt: new Date().toISOString()
         }
       });
@@ -203,12 +204,59 @@ const AppointmentDetails = () => {
       const apptRes = await api.get(`/appointments/${appointmentId}`);
       setAppointment(apptRes.data.data);
       
-      alert('Radiology order submitted successfully! Scan has been assigned to this appointment.');
+      alert('Radiology order placed successfully! Please proceed to payment to complete the scan assignment.');
     } catch (error) {
       console.error('Error submitting radiology order:', error);
       alert(error.response?.data?.message || 'Failed to submit radiology order.');
     } finally {
       setProcessingOrder(false);
+    }
+  };
+
+  // Handle simulating payment success (for demo purposes)
+  const handleSimulatePayment = async () => {
+    if (!window.confirm('Simulate payment success? This will mark the radiology order as paid and completed.')) {
+      return;
+    }
+
+    try {
+      await api.patch(`/appointments/${appointmentId}/radiology-order/pay`);
+      
+      // Refresh appointment data
+      const apptRes = await api.get(`/appointments/${appointmentId}`);
+      setAppointment(apptRes.data.data);
+      
+      alert('Payment simulated successfully! Scan is now available for viewing.');
+    } catch (error) {
+      console.error('Error simulating payment:', error);
+      alert(error.response?.data?.message || 'Failed to simulate payment.');
+    }
+  };
+
+  // Handle proceeding to payment - create invoice and navigate
+  const handleProceedToPayment = async () => {
+    try {
+      // Create an invoice for the scan
+      const invoiceData = {
+        patientId: appointment.patientId,
+        appointmentId: appointmentId,
+        items: [{
+          description: `Radiology Scan - ${appointment.radiologyOrder.indication}`,
+          unitPrice: appointment.radiologyOrder.cost || 200,
+          quantity: 1,
+          total: appointment.radiologyOrder.cost || 200
+        }],
+        totalAmount: appointment.radiologyOrder.cost || 200
+      };
+
+      const invoiceResponse = await api.post('/billing/invoices', invoiceData);
+      const invoiceId = invoiceResponse.data.data.id;
+
+      // Navigate to payment processing page
+      navigate(`/billing/payment/${invoiceId}`);
+    } catch (error) {
+      console.error('Error creating invoice:', error);
+      alert('Failed to create invoice. You can use the "Simulate Payment Success" button for demo purposes.');
     }
   };
 
@@ -379,34 +427,109 @@ const AppointmentDetails = () => {
         <Card title="Radiology">
           {!appointment.radiologyOrder ? (
             <div>
-              <p style={{ marginBottom: '15px', color: '#666' }}>
-                Order a radiology scan for this appointment. The system will automatically assign an appropriate study based on the clinical indication.
-              </p>
-              <Button 
-                onClick={() => setShowRadiologyOrderModal(true)}
-                variant="primary"
-              >
-                Order Scan
-              </Button>
+              {userRole === 'doctor' || userRole === 'admin' || userRole === 'staff' ? (
+                <>
+                  <p style={{ marginBottom: '15px', color: '#666' }}>
+                    Order a radiology scan for this appointment. The system will automatically assign an appropriate study based on the clinical indication.
+                  </p>
+                  <Button 
+                    onClick={() => setShowRadiologyOrderModal(true)}
+                    variant="primary"
+                  >
+                    Order Scan
+                  </Button>
+                </>
+              ) : (
+                <p style={{ color: '#666' }}>
+                  No radiology scan has been ordered for this appointment yet.
+                </p>
+              )}
             </div>
           ) : (
             <div>
+              {/* Status Badge */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
-                <span className="status status-completed" style={{ padding: '5px 10px', borderRadius: '4px', fontSize: '0.9em' }}>
-                  {appointment.radiologyOrder.status === 'completed' ? 'Completed' : 'Ordered'}
+                <span 
+                  className={`status status-${appointment.radiologyOrder.status === 'completed' ? 'completed' : 'pending'}`}
+                  style={{ padding: '5px 10px', borderRadius: '4px', fontSize: '0.9em' }}
+                >
+                  {appointment.radiologyOrder.status === 'completed' 
+                    ? 'Payment Verified & Scan Complete' 
+                    : 'Order Placed - Waiting for Payment'}
                 </span>
                 <span style={{ color: '#666', fontSize: '0.9em' }}>
-                  Order: <strong>{appointment.radiologyOrder.indication}</strong>
-                  {appointment.radiologyOrder.status === 'completed' && ' - Completed'}
+                  Indication: <strong>{appointment.radiologyOrder.indication}</strong>
                 </span>
               </div>
-              {appointment.radiologyOrder.pacsStudyId && (
-                <div style={{ marginBottom: '15px' }}>
+
+              {/* Cost Display */}
+              {appointment.radiologyOrder.cost && (
+                <div style={{ marginBottom: '15px', padding: '10px', backgroundColor: '#f5f5f5', borderRadius: '4px' }}>
                   <span style={{ color: '#666', fontSize: '0.9em' }}>
-                    Study ID: <strong style={{ fontFamily: 'monospace' }}>{appointment.radiologyOrder.pacsStudyId}</strong>
+                    Cost: <strong style={{ fontSize: '1.1em', color: '#0066cc' }}>${appointment.radiologyOrder.cost.toFixed(2)}</strong>
                   </span>
                 </div>
               )}
+
+              {/* Study ID (hidden until payment is complete, shown after payment) */}
+              {appointment.radiologyOrder.status === 'completed' && appointment.radiologyOrder.pacsStudyId && (
+                <div style={{ marginBottom: '15px' }}>
+                  <span style={{ color: '#666', fontSize: '0.9em' }}>
+                    Study ID: <strong style={{ fontFamily: 'monospace', fontSize: '0.85em' }}>{appointment.radiologyOrder.pacsStudyId}</strong>
+                  </span>
+                </div>
+              )}
+
+              {/* Payment Section - Show when status is 'ordered' - Only for patients (not doctors) */}
+              {appointment.radiologyOrder.status === 'ordered' && userRole === 'patient' && (
+                <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#fff3cd', border: '1px solid #ffc107', borderRadius: '4px' }}>
+                  <p style={{ marginBottom: '15px', color: '#856404', fontWeight: 'bold' }}>
+                    Payment Required
+                  </p>
+                  <p style={{ marginBottom: '15px', color: '#666', fontSize: '0.9em' }}>
+                    Please complete payment to access the scan results. The scan has been assigned but is pending payment verification.
+                  </p>
+                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                    <Button 
+                      onClick={handleProceedToPayment}
+                      variant="primary"
+                    >
+                      Proceed to Payment
+                    </Button>
+                  </div>
+                </div>
+              )}
+              
+              {/* Staff/Admin Demo Payment Section - Show simulate button for testing */}
+              {appointment.radiologyOrder.status === 'ordered' && (userRole === 'admin' || userRole === 'staff') && (
+                <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#f0f0f0', border: '1px solid #ccc', borderRadius: '4px' }}>
+                  <p style={{ marginBottom: '15px', color: '#666', fontSize: '0.9em' }}>
+                    Payment pending. Patient must complete payment to access scan results.
+                  </p>
+                  <Button 
+                    onClick={handleSimulatePayment}
+                    variant="secondary"
+                    style={{ 
+                      fontSize: '0.85em',
+                      padding: '8px 12px'
+                    }}
+                    title="For demo/testing purposes only"
+                  >
+                    [Demo] Simulate Payment Success
+                  </Button>
+                </div>
+              )}
+              
+              {/* Doctor View - Show message when status is 'ordered' */}
+              {appointment.radiologyOrder.status === 'ordered' && userRole === 'doctor' && (
+                <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#e7f3ff', border: '1px solid #0066cc', borderRadius: '4px' }}>
+                  <p style={{ marginBottom: '0', color: '#004085', fontSize: '0.9em' }}>
+                    ⏳ Scan order is pending payment. The patient will need to complete payment before the scan results become available.
+                  </p>
+                </div>
+              )}
+
+              {/* View Scan Section - Show only when status is 'completed' */}
               {appointment.radiologyOrder.status === 'completed' && appointment.radiologyOrder.pacsStudyId && (
                 <div style={{ marginTop: '15px' }}>
                   <Button 

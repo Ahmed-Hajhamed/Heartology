@@ -8,7 +8,8 @@ const {
   updateAppointment,
   linkScanToAppointment,
   assignScanToAppointment,
-  getAvailableScans
+  getAvailableScans,
+  markRadiologyOrderAsPaid
 } = require('../controllers/appointmentController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -36,5 +37,8 @@ router.route('/:id/link-scan')
 
 router.route('/:id/assign-scan')
   .patch(assignScanToAppointment);
+
+router.route('/:id/radiology-order/pay')
+  .patch(markRadiologyOrderAsPaid);
 
 module.exports = router;

@@ -511,6 +511,55 @@ const getAvailableScans = async (req, res) => {
   }
 };
 
+// @desc    Mark radiology order as paid/completed
+// @route   PATCH /api/appointments/:id/radiology-order/pay
+// @access  Private (Patient/Staff/Admin)
+const markRadiologyOrderAsPaid = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const apptRef = db.collection('appointments').doc(id);
+    const doc = await apptRef.get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ success: false, message: 'Appointment not found' });
+    }
+
+    const appointment = doc.data();
+
+    // Check if radiology order exists
+    if (!appointment.radiologyOrder || appointment.radiologyOrder.status !== 'ordered') {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Radiology order not found or already completed' 
+      });
+    }
+
+    // Update radiology order status to completed
+    const updateData = {
+      radiologyOrder: {
+        ...appointment.radiologyOrder,
+        status: 'completed'
+      },
+      updatedAt: new Date().toISOString()
+    };
+
+    await apptRef.update(updateData);
+
+    // Fetch updated appointment
+    const updatedDoc = await apptRef.get();
+    const updatedAppointment = { id: updatedDoc.id, ...updatedDoc.data() };
+
+    res.status(200).json({
+      success: true,
+      message: 'Radiology order marked as paid and completed',
+      data: updatedAppointment
+    });
+  } catch (error) {
+    console.error("Mark Radiology Order Paid Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   getAppointments,
   createAppointment,
@@ -519,5 +568,6 @@ module.exports = {
   updateAppointment,
   linkScanToAppointment,
   assignScanToAppointment,
-  getAvailableScans
+  getAvailableScans,
+  markRadiologyOrderAsPaid
 };

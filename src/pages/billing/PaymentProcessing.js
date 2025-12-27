@@ -68,6 +68,10 @@ const PaymentProcessing = () => {
   };
 
   if (loading) return <div className="page-container">Loading payment details...</div>;
+  if (!invoice) return <div className="page-container">Invoice not found.</div>;
+
+  // Calculate balance amount (use balanceAmount if available, otherwise calculate from totalAmount - paidAmount)
+  const balanceAmount = invoice.balanceAmount ?? (invoice.totalAmount - (invoice.paidAmount || 0));
 
   return (
     <div className="page-container">
@@ -77,7 +81,7 @@ const PaymentProcessing = () => {
       </div>
 
       <div className="payment-grid" style={{maxWidth: '600px', margin: '0 auto'}}>
-        <Card title={`Total Due: $${invoice.balanceAmount.toFixed(2)}`}>
+        <Card title={`Total Due: $${balanceAmount.toFixed(2)}`}>
           <form onSubmit={handleSubmit}>
             <FormField
               label="Payment Method"
@@ -129,7 +133,7 @@ const PaymentProcessing = () => {
 
             <div style={{marginTop: '20px'}}>
                 <Button type="submit" variant="primary" disabled={processing} style={{width: '100%'}}>
-                    {processing ? 'Processing...' : `Pay $${invoice.balanceAmount.toFixed(2)}`}
+                    {processing ? 'Processing...' : `Pay $${balanceAmount.toFixed(2)}`}
                 </Button>
             </div>
           </form>
