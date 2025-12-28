@@ -93,28 +93,43 @@ const updateRadiologyOrderOnPayment = async (appointmentId) => {
             }
 
             // 3. Call assignScanToPatient to create a new study with patient's metadata
-            let newStudyInstanceUid;
+            // We'll attempt the assignment, but if it fails we FALLBACK to a viewable Study UID
+            // (either the original template or the stored pacsStudyId) and still mark the order completed.
+            let newStudyInstanceUid = appointment.radiologyOrder?.pacsStudyId || templateStudyUid;
+            let assignmentFailed = false;
+            let assignmentErrorMsg = null;
+
             try {
-                newStudyInstanceUid = await assignScanToPatient(templateStudyUid, {
+                const assignedUid = await assignScanToPatient(templateStudyUid, {
                     fullName: patientFullName,
                     id: patientDoc.id
                 });
+
+                // Use the newly created study UID when assignment succeeds
+                if (assignedUid) newStudyInstanceUid = assignedUid;
             } catch (error) {
+                // Log and fallback to ensure the scan becomes viewable and status updates
                 console.error(`Error assigning scan to patient for appointment ${appointmentId}:`, error);
-                // Don't throw error - payment should still succeed even if scan assignment fails
-                return;
+                assignmentFailed = true;
+                assignmentErrorMsg = error.message || String(error);
+                // newStudyInstanceUid keeps the existing pacsStudyId or templateStudyUid so viewers can still load something
             }
 
-            // 4. Update radiology order status to completed and save the new Study Instance UID
-            await apptRef.update({
+            // 4. Update radiology order status to completed and save the Study Instance UID (fallback if needed)
+            const updateData = {
                 radiologyOrder: {
                     ...appointment.radiologyOrder,
                     status: 'completed',
-                    pacsStudyId: newStudyInstanceUid // Save the NEW UID (not the template UID)
+                    pacsStudyId: newStudyInstanceUid,
+                    assignmentFailed,
+                    assignmentErrorMsg,
+                    assignmentTriedAt: new Date().toISOString()
                 },
                 updatedAt: new Date().toISOString()
-            });
-            console.log(`Radiology order marked as completed for appointment ${appointmentId}. New Study Instance UID: ${newStudyInstanceUid}`);
+            };
+
+            await apptRef.update(updateData);
+            console.log(`Radiology order marked as completed for appointment ${appointmentId}. Study UID set to: ${newStudyInstanceUid}${assignmentFailed ? ' (assignment failed, used fallback)' : ''}`);
         }
     } catch (error) {
         console.error(`Error updating radiology order for appointment ${appointmentId}:`, error);

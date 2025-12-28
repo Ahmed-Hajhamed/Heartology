@@ -608,26 +608,34 @@ const markRadiologyOrderAsPaid = async (req, res) => {
     }
 
     // 3. Call assignScanToPatient to create a new study with patient's metadata
-    let newStudyInstanceUid;
+    // Attempt assignment, but fallback to template or stored pacsStudyId on failure
+    let newStudyInstanceUid = appointment.radiologyOrder?.pacsStudyId || templateStudyUid;
+    let assignmentFailed = false;
+    let assignmentErrorMsg = null;
+
     try {
-      newStudyInstanceUid = await assignScanToPatient(templateStudyUid, {
+      const assignedUid = await assignScanToPatient(templateStudyUid, {
         fullName: patientFullName,
         id: patientDoc.id
       });
+
+      if (assignedUid) newStudyInstanceUid = assignedUid;
     } catch (error) {
       console.error('Error assigning scan to patient:', error);
-      return res.status(500).json({ 
-        success: false, 
-        message: `Failed to assign scan to patient: ${error.message}` 
-      });
+      assignmentFailed = true;
+      assignmentErrorMsg = error.message || String(error);
+      // Continue - we will use fallback UID to allow viewing
     }
 
-    // 4. Update radiology order status to completed and save the new Study Instance UID
+    // 4. Update radiology order status to completed and save the Study Instance UID (fallback if needed)
     const updateData = {
       radiologyOrder: {
         ...appointment.radiologyOrder,
         status: 'completed',
-        pacsStudyId: newStudyInstanceUid // Save the NEW UID (not the template UID)
+        pacsStudyId: newStudyInstanceUid,
+        assignmentFailed,
+        assignmentErrorMsg,
+        assignmentTriedAt: new Date().toISOString()
       },
       updatedAt: new Date().toISOString()
     };
