@@ -534,8 +534,7 @@ const AppointmentDetails = () => {
                 <div style={{ marginTop: '15px' }}>
                   <Button 
                     onClick={() => {
-                      // Use StudyInstanceUIDs parameter to open only the specific scan directly in the viewer
-                      // This bypasses the Study List and opens the viewer directly for this specific scan
+                      // Navigate to the Radiology Workspace with embedded viewer and AI tools
                       const pacsStudyId = appointment.radiologyOrder.pacsStudyId;
                       
                       // Validate that we have a real Study Instance UID (not a mock ID)
@@ -548,10 +547,8 @@ const AppointmentDetails = () => {
                         return;
                       }
                       
-                      const ohifUrl = `http://localhost:3000/viewer?StudyInstanceUIDs=${encodeURIComponent(pacsStudyId)}`;
-                      console.log('Opening OHIF viewer with Study Instance UID:', pacsStudyId);
-                      console.log('Full URL:', ohifUrl);
-                      window.open(ohifUrl, '_blank');
+                      // Navigate to the workspace page
+                      navigate(`/radiology/workspace/${pacsStudyId}`);
                     }}
                     variant="primary"
                   >

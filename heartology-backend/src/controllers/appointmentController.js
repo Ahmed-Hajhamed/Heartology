@@ -1,6 +1,7 @@
 const { db } = require('../config/firebase');
 const https = require('https');
 const http = require('http');
+const { assignScanToPatient } = require('../services/RadiologyService');
 
 // Predefined scan codes corresponding to the 20 MRI scans in Orthanc
 const VALID_SCAN_CODES = [
@@ -8,6 +9,34 @@ const VALID_SCAN_CODES = [
   'A1O8Z3', 'A2C0I1', 'A2E3W4', 'A2H5K9', 'A2L1N6',
   'A2N8V0', 'A3B7E5', 'A3H1O5', 'A3H5R1', 'A3P9V7',
   'A4A8V9', 'A4B5U4', 'A4B9O6', 'A4J4S4', 'A4K8R4'
+];
+
+// Template Study Instance UIDs for normal heart scans
+const NORMAL_HEART_SCANS = [
+  '1.2.826.0.1.3680043.8.498.65932550331660928509262777099721109252',
+  '1.2.826.0.1.3680043.8.498.93860610018678669415400309565886088268',
+  '1.2.826.0.1.3680043.8.498.16230640878550461263592119697880533664',
+  '1.2.826.0.1.3680043.8.498.70493775531032013625068629168153348774',
+  '1.2.826.0.1.3680043.8.498.62909792531251488518012102295631110640',
+  '1.2.826.0.1.3680043.8.498.18036823888686057185019461954698582157',
+  '1.2.826.0.1.3680043.8.498.71805375670784599698576703485251744630',
+  '1.2.826.0.1.3680043.8.498.16745248682361182860928038522938653566',
+  '1.2.826.0.1.3680043.8.498.6498038521325610489020693643369776880',
+  '1.2.826.0.1.3680043.8.498.7022036604774013878789975655574534184'
+];
+
+// Template Study Instance UIDs for pathology scans
+const PATHOLOGY_SCANS = [
+  '1.2.826.0.1.3680043.8.498.18022695992288037033873592157909703020',
+  '1.2.826.0.1.3680043.8.498.7820599399092157576391313312410202875',
+  '1.2.826.0.1.3680043.8.498.50481687033231048677167096858227352461',
+  '1.2.826.0.1.3680043.8.498.94990454134576571137582239688317624874',
+  '1.2.826.0.1.3680043.8.498.83049522846639332443312661389619858155',
+  '1.2.826.0.1.3680043.8.498.17516516330689793076318675615348960514',
+  '1.2.826.0.1.3680043.8.498.27639721448444283872302994227385374925',
+  '1.2.826.0.1.3680043.8.498.98271428593790177001153501071893376478',
+  '1.2.826.0.1.3680043.8.498.51718206548003017673630543493327578116',
+  '1.2.826.0.1.3680043.8.498.94307292311091491912285978384814594342'
 ];
 
 // @desc    Get all appointments (Filtered by Role)
@@ -534,11 +563,71 @@ const markRadiologyOrderAsPaid = async (req, res) => {
       });
     }
 
-    // Update radiology order status to completed
+    // 1. Get patient information (firstName, lastName)
+    const patientDoc = await db.collection('patients').doc(appointment.patientId).get();
+    if (!patientDoc.exists) {
+      return res.status(404).json({ success: false, message: 'Patient not found' });
+    }
+
+    const patientData = patientDoc.data();
+    const userDoc = await db.collection('users').doc(patientData.userId).get();
+    if (!userDoc.exists) {
+      return res.status(404).json({ success: false, message: 'User not found for patient' });
+    }
+
+    const userData = userDoc.data();
+    const patientFullName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+    
+    if (!patientFullName) {
+      return res.status(400).json({ success: false, message: 'Patient name not found' });
+    }
+
+    // 2. Select a random template UID based on indication
+    const indication = appointment.radiologyOrder.indication || '';
+    let templateStudyUid = null;
+    
+    // Determine which template list to use based on indication
+    if (indication.toLowerCase().includes('routine') || indication.toLowerCase().includes('normal')) {
+      // Use normal scans for routine checkups
+      const randomIndex = Math.floor(Math.random() * NORMAL_HEART_SCANS.length);
+      templateStudyUid = NORMAL_HEART_SCANS[randomIndex];
+    } else if (indication.toLowerCase().includes('hypertrophy') || 
+               indication.toLowerCase().includes('pathology') ||
+               indication.toLowerCase().includes('dilated')) {
+      // Use pathology scans for abnormal cases
+      const randomIndex = Math.floor(Math.random() * PATHOLOGY_SCANS.length);
+      templateStudyUid = PATHOLOGY_SCANS[randomIndex];
+    } else {
+      // Default to normal scans if indication is unclear
+      const randomIndex = Math.floor(Math.random() * NORMAL_HEART_SCANS.length);
+      templateStudyUid = NORMAL_HEART_SCANS[randomIndex];
+    }
+
+    if (!templateStudyUid) {
+      return res.status(500).json({ success: false, message: 'Failed to select template scan' });
+    }
+
+    // 3. Call assignScanToPatient to create a new study with patient's metadata
+    let newStudyInstanceUid;
+    try {
+      newStudyInstanceUid = await assignScanToPatient(templateStudyUid, {
+        fullName: patientFullName,
+        id: patientDoc.id
+      });
+    } catch (error) {
+      console.error('Error assigning scan to patient:', error);
+      return res.status(500).json({ 
+        success: false, 
+        message: `Failed to assign scan to patient: ${error.message}` 
+      });
+    }
+
+    // 4. Update radiology order status to completed and save the new Study Instance UID
     const updateData = {
       radiologyOrder: {
         ...appointment.radiologyOrder,
-        status: 'completed'
+        status: 'completed',
+        pacsStudyId: newStudyInstanceUid // Save the NEW UID (not the template UID)
       },
       updatedAt: new Date().toISOString()
     };
@@ -551,7 +640,7 @@ const markRadiologyOrderAsPaid = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'Radiology order marked as paid and completed',
+      message: 'Radiology order marked as paid and completed. Scan assigned to patient.',
       data: updatedAppointment
     });
   } catch (error) {

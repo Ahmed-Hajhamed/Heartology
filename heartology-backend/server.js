@@ -12,6 +12,7 @@ const medicalRecordRoutes = require('./src/routes/medicalRecordRoutes');
 const prescriptionRoutes = require('./src/routes/prescriptionRoutes');
 const billingRoutes = require('./src/routes/billingRoutes');
 const analyticsRoutes = require('./src/routes/analyticsRoutes');
+const radiologyRoutes = require('./src/routes/radiologyRoutes');
 
 
 
@@ -41,6 +42,7 @@ app.use('/api/medical-records', medicalRecordRoutes);
 app.use('/api/prescriptions', prescriptionRoutes);
 app.use('/api/billing', billingRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/radiology', radiologyRoutes);
 
 
 if (process.env.NODE_ENV === 'development') {

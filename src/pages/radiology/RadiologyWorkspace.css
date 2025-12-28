@@ -1,0 +1,102 @@
+/* FORCE FULL SCREEN OVERLAY */
+.radiology-workspace {
+  position: fixed;   /* 1. Break out of normal document flow */
+  top: 0;
+  left: 0;
+  width: 100vw;      /* 2. Force full viewport width */
+  height: 100vh;     /* 3. Force full viewport height */
+  z-index: 2000;     /* 4. Sit ON TOP of your main app navbar */
+  
+  display: flex;
+  flex-direction: column;
+  background-color: #1a1a1a;
+  color: #ffffff;
+  overflow: hidden;
+}
+
+/* HEADER (Top Bar) */
+.workspace-header {
+  flex: 0 0 auto;
+  height: 60px;      /* Fixed height */
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 25px;
+  background-color: #2a2a2a;
+  border-bottom: 1px solid #3a3a3a;
+  box-sizing: border-box; /* Ensures padding doesn't add to height */
+}
+
+.workspace-header h1 {
+  margin: 0;
+  font-size: 1.25em;
+  color: #f0f0f0;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+}
+
+/* MAIN CONTAINER (Split View) */
+.workspace-container {
+  flex: 1;           /* Take remaining height (100vh - 60px) */
+  display: flex;
+  flex-direction: row; /* SIDE BY SIDE LAYOUT */
+  overflow: hidden;
+  position: relative;
+}
+
+/* LEFT SIDE: VIEWER (70% Width) */
+.viewer-section {
+  flex: 0 0 70%;
+  width: 70%;
+  height: 100%;
+  background-color: #000;
+  position: relative;
+  border-right: 1px solid #333;
+}
+
+.ohif-viewer-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+}
+
+/* RIGHT SIDE: AI PANEL (30% Width) */
+.ai-panel {
+  flex: 0 0 30%;
+  width: 30%;
+  height: 100%;
+  background-color: #1e1e1e;
+  display: flex;
+  flex-direction: column;
+}
+
+.ai-panel-header {
+  padding: 15px 20px;
+  background-color: #252525;
+  border-bottom: 1px solid #333;
+  flex: 0 0 auto;
+}
+
+.ai-panel-header h2 {
+  margin: 0;
+  font-size: 1.1em;
+  color: #fff;
+}
+
+.ai-panel-content {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto; /* Enables scrolling for long reports */
+  display: flex;
+  flex-direction: column;
+}
+
+/* -- YOUR AI REPORT STYLES -- */
+/* (Paste the badge, diagnosis text, and spinner styles here) */
+.diagnosis-text { font-size: 1.5em; font-weight: bold; margin: 10px 0; }
+.confidence-badge { 
+  background: #007bff; color: white; padding: 5px 15px; 
+  border-radius: 15px; font-weight: bold; display: inline-block;
+}
+.segmentation-data { display: flex; gap: 15px; margin-top: 10px; color: #aaa; }

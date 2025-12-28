@@ -41,6 +41,7 @@ import PaymentProcessing from './pages/billing/PaymentProcessing';
 import Icd10Lookup from './pages/icd10/Icd10Lookup';
 import RadiologyList from './pages/radiology/RadiologyList';
 import RadiologyViewer from './pages/radiology/RadiologyViewer';
+import RadiologyWorkspace from './pages/radiology/RadiologyWorkspace';
 import Reports from './pages/reports/Reports';
 
 function App() {
@@ -131,6 +132,7 @@ function App() {
           {/* Radiology */}
           <Route path="/radiology" element={<ProtectedRoute><RadiologyList /></ProtectedRoute>} />
           <Route path="/radiology/:studyId" element={<ProtectedRoute><RadiologyViewer /></ProtectedRoute>} />
+          <Route path="/radiology/workspace/:pacsStudyId" element={<ProtectedRoute><RadiologyWorkspace /></ProtectedRoute>} />
           
           {/* Reports */}
           <Route path="/reports" element={<ProtectedRoute allowedRoles={['admin', 'staff']}><Reports /></ProtectedRoute>} />
