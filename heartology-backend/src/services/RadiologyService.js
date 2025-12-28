@@ -111,7 +111,51 @@ const assignScanToPatient = async (templateStudyUid, patientData) => {
   }
 };
 
+/**
+ * Fetch a PNG preview image for a study from Orthanc and return as Buffer
+ * @param {string} studyUid
+ * @returns {Promise<Buffer>} - PNG image buffer
+ */
+const fetchStudyPreview = (studyUid) => {
+  return new Promise((resolve, reject) => {
+    try {
+      if (!studyUid) return reject(new Error('studyUid is required'));
+
+      const url = `${ORTHANC_URL}/studies/${studyUid}/preview`;
+      const urlObj = new URL(url);
+      const protocol = urlObj.protocol === 'https:' ? https : http;
+
+      const options = {
+        hostname: urlObj.hostname,
+        port: urlObj.port || (urlObj.protocol === 'https:' ? 443 : 80),
+        path: urlObj.pathname + urlObj.search,
+        method: 'GET'
+      };
+
+      const req = protocol.request(options, (res) => {
+        const chunks = [];
+        res.on('data', (chunk) => chunks.push(chunk));
+        res.on('end', () => {
+          const buffer = Buffer.concat(chunks);
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            resolve(buffer);
+          } else {
+            reject(new Error(`Orthanc preview returned ${res.statusCode}: ${res.statusMessage}`));
+          }
+        });
+      });
+
+      req.on('error', (err) => reject(err));
+      req.end();
+
+    } catch (err) {
+      reject(err);
+    }
+  });
+};
+
 module.exports = {
-  assignScanToPatient
+  assignScanToPatient,
+  fetchStudyPreview
 };
 

@@ -21,11 +21,7 @@ const predictRadiology = async (req, res) => {
     }
 
     // Path to the Python script (it's in the project root, 3 levels up from controllers)
-    // __dirname = heartology-backend/src/controllers
-    // Go up 3 levels to reach Heartology root where cdss_inference.py is located
     const scriptPath = path.join(__dirname, '../../../', 'cdss_inference.py');
-    
-    // Also need to set the working directory to the project root so the CSV file can be found
     const projectRoot = path.join(__dirname, '../../../');
 
     // Execute the Python script with the working directory set to project root
@@ -43,7 +39,7 @@ const predictRadiology = async (req, res) => {
     // Parse the JSON output from the Python script
     try {
       const result = JSON.parse(stdout.trim());
-      
+
       // Check if the result contains an error (the Python script returns error objects in JSON)
       if (result.error) {
         return res.status(500).json({
@@ -54,10 +50,7 @@ const predictRadiology = async (req, res) => {
       }
 
       // Return the successful result
-      return res.status(200).json({
-        success: true,
-        data: result
-      });
+      return res.status(200).json({ success: true, data: result });
 
     } catch (parseError) {
       console.error('Error parsing Python script output:', parseError);
@@ -69,10 +62,9 @@ const predictRadiology = async (req, res) => {
         rawOutput: stdout
       });
     }
-
   } catch (error) {
     console.error('Error running AI prediction:', error);
-    
+
     // Handle specific error cases
     if (error.code === 'ENOENT') {
       return res.status(500).json({
@@ -82,7 +74,7 @@ const predictRadiology = async (req, res) => {
       });
     }
 
-    if (error.code === 127 || error.message.includes('python')) {
+    if (error.code === 127 || (error.message && error.message.includes('python'))) {
       return res.status(500).json({
         success: false,
         message: 'Python not found. Please ensure Python is installed and accessible from PATH.',
@@ -90,15 +82,31 @@ const predictRadiology = async (req, res) => {
       });
     }
 
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to run AI prediction',
-      error: error.message
-    });
+    return res.status(500).json({ success: false, message: 'Failed to run AI prediction', error: error.message });
+  }
+};
+
+// Get study thumbnail from Orthanc
+const getStudyThumbnail = async (req, res) => {
+  try {
+    const studyId = req.params.id;
+    if (!studyId) return res.status(400).json({ success: false, message: 'Study ID required' });
+
+    const { fetchStudyPreview } = require('../services/RadiologyService');
+    const buffer = await fetchStudyPreview(studyId);
+
+    // Convert to base64 and return directly
+    const imageBase64 = buffer.toString('base64');
+
+    res.status(200).json({ success: true, data: { imageBase64 } });
+  } catch (error) {
+    console.error('Error fetching study thumbnail:', error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
 module.exports = {
-  predictRadiology
+  predictRadiology,
+  getStudyThumbnail
 };
 

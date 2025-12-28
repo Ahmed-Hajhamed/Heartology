@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import FormField from '../../components/common/FormField';
@@ -10,10 +10,21 @@ const CreatePrescription = () => {
   const [loading, setLoading] = useState(false);
   const [doctorId, setDoctorId] = useState(null);
 
+  const location = useLocation();
   const [patientId, setPatientId] = useState('');
+  const [medicalRecordId, setMedicalRecordId] = useState(null);
   const [medications, setMedications] = useState([
     { drugName: '', dosage: '', frequency: '', duration: '', instructions: '' }
   ]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const pid = params.get('patientId');
+    const mrid = params.get('medicalRecordId');
+
+    if (pid) setPatientId(pid);
+    if (mrid) setMedicalRecordId(mrid);
+  }, [location]);
 
   // 1. Get Doctor ID on Load
   useEffect(() => {
@@ -57,6 +68,7 @@ const CreatePrescription = () => {
         patientId: patientId,
         doctorId: doctorId,
         medications: medications,
+        medicalRecordId: medicalRecordId || null,
         refillsAllowed: 0,
         notes: "Prescribed via Web Portal"
       };

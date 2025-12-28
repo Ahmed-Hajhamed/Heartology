@@ -5,6 +5,8 @@ import Button from '../../components/common/Button';
 import Modal from '../../components/common/Modal';
 import FormField from '../../components/common/FormField';
 import api from '../../services/api';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const AppointmentDetails = () => {
   const { appointmentId } = useParams();
@@ -233,6 +235,263 @@ const AppointmentDetails = () => {
     }
   };
 
+  // Generate a PDF report for this appointment
+  const [generatingReport, setGeneratingReport] = useState(false);
+  const handleGenerateReport = async () => {
+    if (generatingReport) return;
+    setGeneratingReport(true);
+
+    // small helper for page breaks
+    const ensureSpace = (doc, y, estimatedHeight = 120) => {
+      const pageHeight = doc.internal.pageSize.getHeight();
+      if (y + estimatedHeight > pageHeight - 80) {
+        doc.addPage();
+        return 40; // reset y after new page
+      }
+      return y;
+    };
+
+    try {
+      // 1. Ensure medical record exists for this appointment
+      const mrRes = await api.get(`/medical-records?appointmentId=${appointmentId}`);
+      if (!mrRes.data || mrRes.data.count === 0) {
+        if (window.confirm('No medical record found for this appointment. Create one now?')) {
+          navigate(`/medical-records/create?patientId=${appointment.patientId}&appointmentId=${appointmentId}`);
+          return;
+        } else {
+          return;
+        }
+      }
+
+      let medicalRecord = mrRes.data.data[0]; // Use latest record
+
+      // Fetch full record to ensure nested fields are present
+      try {
+        const fullMr = await api.get(`/medical-records/${medicalRecord.id}`);
+        medicalRecord = fullMr.data?.data || medicalRecord;
+      } catch (e) {
+        console.warn('Could not fetch full medical record, using summary', e);
+      }
+
+      // 2. Ensure prescription exists (linked to medical record if possible)
+      const rxRes = await api.get(`/prescriptions?patientId=${appointment.patientId}`);
+      const prescriptions = rxRes.data?.data || [];
+      const matchingRx = prescriptions.filter(rx => rx.medicalRecordId === medicalRecord.id || rx.doctorId === appointment.doctorId);
+
+      if (matchingRx.length === 0) {
+        if (window.confirm('No prescription found for this appointment. Create one now?')) {
+          navigate(`/prescriptions/create?patientId=${appointment.patientId}&doctorId=${appointment.doctorId}&medicalRecordId=${medicalRecord.id}`);
+          return;
+        } else {
+          return;
+        }
+      }
+
+      // 3. Fetch patient and doctor full info if not present
+      let patientData = null;
+      try {
+        const pRes = await api.get(`/patients/${appointment.patientId}`);
+        patientData = pRes.data?.data || null;
+      } catch (e) {
+        console.warn('Could not fetch patient data', e);
+      }
+
+      let doctorData = null;
+      try {
+        const dRes = await api.get(`/doctors/${appointment.doctorId}`);
+        doctorData = dRes.data?.data || null;
+      } catch (e) {
+        console.warn('Could not fetch doctor data', e);
+      }
+
+      // Removed Orthanc thumbnail fetch (thumbnails/scan images are excluded from reports)
+
+      // 5. Build PDF using jsPDF (table-based)
+      const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      let y = 40;
+
+      doc.setFontSize(18);
+      doc.text('Appointment Report', pageWidth / 2, y, { align: 'center' });
+      y += 20;
+
+      doc.setFontSize(11);
+      doc.setTextColor(80);
+
+      // Appointment Details
+      autoTable(doc, {
+        startY: y,
+        theme: 'grid',
+        head: [['Field', 'Value']],
+        body: [
+          ['Appointment ID', appointmentId],
+          ['Date', new Date(appointment.appointmentDate).toLocaleString()],
+          ['Type', appointment.type || 'N/A']
+        ],
+        styles: { fontSize: 10 },
+        margin: { left: 40, right: 40 }
+      });
+      y = doc.lastAutoTable.finalY + 12;
+
+      // Patient & Provider
+      const patientFullName = patientData?.personalInfo ? `${patientData.personalInfo.firstName} ${patientData.personalInfo.lastName}` : patientName;
+      autoTable(doc, {
+        startY: y,
+        theme: 'grid',
+        head: [['Field', 'Value']],
+        body: [
+          ['Patient', patientFullName || 'N/A'],
+          ['Patient ID', appointment.patientId],
+          ['Doctor', doctorData ? `Dr. ${doctorData.firstName} ${doctorData.lastName}` : doctorName || 'N/A'],
+          ['Doctor ID', appointment.doctorId]
+        ],
+        styles: { fontSize: 10 },
+        margin: { left: 40, right: 40 }
+      });
+      y = doc.lastAutoTable.finalY + 12;
+
+      // Vitals
+      const vitals = medicalRecord.vitalSigns || {};
+      const formatBP = () => {
+        if (!vitals.bloodPressure) return 'N/A';
+        if (typeof vitals.bloodPressure === 'string') return vitals.bloodPressure;
+        return `${vitals.bloodPressure.systolic}/${vitals.bloodPressure.diastolic}`;
+      };
+
+      autoTable(doc, {
+        startY: y,
+        head: [['Vital', 'Value']],
+        body: [
+          ['Blood Pressure', formatBP()],
+          ['Heart Rate', vitals.heartRate || 'N/A'],
+          ['Temperature', vitals.temperature != null ? `${vitals.temperature} °C` : 'N/A'],
+          ['O2 Sat', vitals.oxygenSaturation != null ? `${vitals.oxygenSaturation} %` : 'N/A']
+        ],
+        styles: { fontSize: 10 },
+        margin: { left: 40, right: 40 }
+      });
+      y = doc.lastAutoTable.finalY + 12;
+
+      // Clinical Notes (SOAP) - each field as a row (autoTable will wrap)
+      const notes = medicalRecord.clinicalNotes || {
+        chiefComplaint: medicalRecord.chiefComplaint,
+        subjective: medicalRecord.subjective,
+        objective: medicalRecord.objective,
+        assessment: medicalRecord.assessment,
+        plan: medicalRecord.plan
+      };
+
+      autoTable(doc, {
+        startY: y,
+        head: [['Section', 'Details']],
+        body: [
+          ['Chief Complaint', notes.chiefComplaint || 'N/A'],
+          ['Subjective', notes.subjective || 'N/A'],
+          ['Objective', notes.objective || 'N/A'],
+          ['Assessment', notes.assessment || 'N/A'],
+          ['Plan', notes.plan || 'N/A']
+        ],
+        styles: { fontSize: 10 },
+        margin: { left: 40, right: 40 }
+      });
+      y = doc.lastAutoTable.finalY + 12;
+
+      // Diagnoses
+      if (medicalRecord.diagnoses && medicalRecord.diagnoses.length > 0) {
+        const diagRows = medicalRecord.diagnoses.map(d => [d.icd10Code || d.code || 'N/A', d.description || 'N/A']);
+        autoTable(doc, {
+          startY: y,
+          head: [['Code', 'Description']],
+          body: diagRows,
+          styles: { fontSize: 10 },
+          margin: { left: 40, right: 40 }
+        });
+        y = doc.lastAutoTable.finalY + 12;
+      }
+
+      // Lab Results
+      const labs = medicalRecord.labResults || medicalRecord.labs;
+      if (labs && Array.isArray(labs) && labs.length > 0) {
+        const labRows = labs.map(l => [l.name || l.testName || 'Lab', l.value ? `${l.value} ${l.unit || ''}` : l.result || 'N/A', l.notes || '']);
+        autoTable(doc, {
+          startY: y,
+          head: [['Test', 'Result', 'Notes']],
+          body: labRows,
+          styles: { fontSize: 10 },
+          margin: { left: 40, right: 40 }
+        });
+        y = doc.lastAutoTable.finalY + 12;
+      }
+
+      // Attachments - list as table rows (no embedded images)
+      const attachments = medicalRecord.attachments || [];
+      if (attachments.length > 0) {
+        const attRows = attachments.map(a => {
+          const url = typeof a === 'string' ? a : a.url || a.fileUrl || '';
+          const name = typeof a === 'string' ? (a.split('/').pop() || a) : a.name || a.filename || 'Attachment';
+          return [name, url];
+        });
+        autoTable(doc, {
+          startY: y,
+          head: [['File', 'URL']],
+          body: attRows,
+          styles: { fontSize: 9 },
+          margin: { left: 40, right: 40 }
+        });
+        y = doc.lastAutoTable.finalY + 12;
+      }
+
+
+
+      // AI / Derived Metrics (from medical record or appointment-level only)
+      const ai = medicalRecord.aiResults || medicalRecord.aiAnalysis || appointment.aiResults;
+      if (ai) {
+        const aiRows = typeof ai === 'object' ? Object.entries(ai).map(([k, v]) => [k, typeof v === 'object' ? JSON.stringify(v) : String(v)]) : [['result', String(ai)]];
+        autoTable(doc, {
+          startY: y,
+          head: [['Metric', 'Value']],
+          body: aiRows,
+          styles: { fontSize: 9 },
+          margin: { left: 40, right: 40 }
+        });
+        y = doc.lastAutoTable.finalY + 12;
+      }
+
+      // Prescriptions summary
+      const prescRows = matchingRx.map(rx => [
+        new Date(rx.prescriptionDate).toLocaleDateString(),
+        (rx.medications || []).map(m => m.drugName).join(', '),
+        rx.notes || 'N/A'
+      ]);
+
+      if (prescRows.length > 0) {
+        autoTable(doc, {
+          startY: y,
+          head: [['Date', 'Medications', 'Notes']],
+          body: prescRows,
+          styles: { fontSize: 10 },
+          margin: { left: 40, right: 40 }
+        });
+        y = doc.lastAutoTable.finalY + 12;
+      }
+
+      // Footer
+      doc.setFontSize(9);
+      doc.setTextColor(150);
+      doc.text(`Generated by Heartology - ${new Date().toLocaleString()}`, pageWidth / 2, pageHeight - 20, { align: 'center' });
+
+      // Save PDF
+      doc.save(`Appointment_Report_${appointmentId}.pdf`);
+
+    } catch (error) {
+      console.error('Error generating report:', error);
+      alert(error.response?.data?.message || error.message || 'Failed to generate report');
+    } finally {
+      setGeneratingReport(false);
+    }
+  };
+
   // Handle proceeding to payment - create invoice and navigate
   const handleProceedToPayment = async () => {
     try {
@@ -336,6 +595,10 @@ const AppointmentDetails = () => {
         <h1>Appointment Details</h1>
         <div className="header-actions">
           <Button variant="secondary" onClick={() => navigate(-1)}>Back</Button>
+
+          <Button onClick={handleGenerateReport} variant="secondary" disabled={generatingReport}>
+            {generatingReport ? 'Generating...' : '📄 Generate Report'}
+          </Button>
 
           {/* Status Update Buttons based on current status */}
           {appointment.status === 'Scheduled' && (

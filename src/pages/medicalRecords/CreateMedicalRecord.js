@@ -128,8 +128,23 @@ const CreateMedicalRecord = () => {
       <form onSubmit={handleSubmit}>
         <Card title="Context">
             <div className="form-grid">
-                <FormField label="Patient ID" name="patientId" value={formData.patientId} onChange={handleChange} required />
-                <FormField label="Appointment ID" name="appointmentId" value={formData.appointmentId} onChange={handleChange} />
+                <FormField 
+                  label="Patient ID" 
+                  name="patientId" 
+                  value={formData.patientId} 
+                  onChange={handleChange} 
+                  required 
+                  disabled={!!formData.patientId}
+                />
+
+                <FormField 
+                  label="Appointment ID" 
+                  name="appointmentId" 
+                  value={formData.appointmentId} 
+                  onChange={handleChange} 
+                  disabled={!!formData.appointmentId}
+                />
+
                 <FormField 
                     label="Record Type" 
                     type="select" 
@@ -143,6 +158,13 @@ const CreateMedicalRecord = () => {
                     ]} 
                 />
             </div>
+
+            {(formData.patientId || formData.appointmentId) && (
+              <div style={{ marginTop: '10px', color: '#555', fontSize: '0.9em' }}>
+                {formData.patientId && (<div>Patient ID auto-filled from context.</div>)}
+                {formData.appointmentId && (<div>Appointment ID auto-filled from context.</div>)}
+              </div>
+            )}
         </Card>
 
         <Card title="Vital Signs" className="mt-4">
