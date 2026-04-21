@@ -225,12 +225,10 @@ This is a frontend demonstration project. For production use:
 
 ## 📄 License
 
-This project is created for educational and demonstration purposes.
+This project is licensed under the MIT and EULA license.
 
 ## 🤝 Support
 
 For questions or support, please contact the development team.
 
 ---
-
-**Built with ❤️ for Heartology Cardiology Center**
