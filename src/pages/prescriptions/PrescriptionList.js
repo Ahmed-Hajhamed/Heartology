@@ -12,6 +12,8 @@ const PrescriptionList = () => {
   const [prescriptions, setPrescriptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState('');
+  const [doctors, setDoctors] = useState([]);
+  const [patients, setPatients] = useState([]);
 
   useEffect(() => {
     const fetchPrescriptions = async () => {
@@ -35,16 +37,45 @@ const PrescriptionList = () => {
         // 2. Fetch Data
         const response = await api.get(`/prescriptions${queryParams}`);
         
-        // 3. Map Data for Table
-        // Ideally, you'd fetch Patient Names here too, but for now we show IDs or map what we have
-        const mappedData = response.data.data.map(rx => ({
-            prescriptionId: rx.id,
-            patientName: rx.patientId, // Backend sends ID. You can fetch names if needed.
-            doctorName: rx.doctorId,   // Backend sends ID.
-            date: new Date(rx.prescriptionDate).toLocaleDateString(),
-            medicationCount: rx.medications ? rx.medications.length : 0,
-            status: rx.status,
-            rawDate: rx.prescriptionDate
+        // Fetch doctors and patients lists for name mapping
+        const [doctorsRes, patientsRes] = await Promise.all([
+          api.get('/doctors'),
+          api.get('/patients')
+        ]);
+        
+        const doctorsList = doctorsRes.data.data;
+        const patientsList = patientsRes.data.data;
+        setDoctors(doctorsList);
+        setPatients(patientsList);
+        
+        // 3. Map Data for Table with names instead of IDs
+        const mappedData = await Promise.all(response.data.data.map(async (rx) => {
+            // Get doctor name
+            const doctor = doctorsList.find(d => d.id === rx.doctorId);
+            const doctorName = doctor ? `Dr. ${doctor.name || doctor.lastName}` : 'Unknown Doctor';
+            
+            // Get patient name
+            const patient = patientsList.find(p => p.id === rx.patientId);
+            let patientName = 'Unknown Patient';
+            if (patient && patient.userId) {
+              try {
+                const userRes = await api.get(`/users/${patient.userId}`);
+                const userData = userRes.data.data;
+                patientName = `${userData.firstName} ${userData.lastName}`;
+              } catch (err) {
+                console.error('Error fetching patient user data:', err);
+              }
+            }
+            
+            return {
+                prescriptionId: rx.id,
+                patientName: patientName,
+                doctorName: doctorName,
+                date: new Date(rx.prescriptionDate).toLocaleDateString(),
+                medicationCount: rx.medications ? rx.medications.length : 0,
+                status: rx.status,
+                rawDate: rx.prescriptionDate
+            };
         }));
 
         setPrescriptions(mappedData);
@@ -61,7 +92,8 @@ const PrescriptionList = () => {
 
   const columns = [
     { header: 'Prescription ID', accessor: 'prescriptionId' },
-    { header: 'Patient ID', accessor: 'patientName' }, // Renamed column header to ID for clarity
+    { header: 'Patient Name', accessor: 'patientName' },
+    { header: 'Doctor Name', accessor: 'doctorName' },
     { header: 'Date', accessor: 'date' },
     { header: 'Medications', render: (row) => `${row.medicationCount} items` },
     { 

@@ -63,7 +63,7 @@ const InvoiceList = () => {
 
   const columns = [
     { header: 'Invoice ID', accessor: 'invoiceId' },
-    { header: 'Patient ID', accessor: 'patientName' },
+    { header: 'Patient Name', accessor: 'patientName' },
     { header: 'Issue Date', accessor: 'issueDate' },
     { header: 'Amount', render: (row) => `$${row.totalAmount.toFixed(2)}` },
     { 

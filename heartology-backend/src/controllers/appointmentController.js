@@ -207,10 +207,65 @@ const updateAppointmentStatus = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Appointment not found' });
     }
 
+    const appointmentData = doc.data();
+    
+    // Update appointment status
     await apptRef.update({ status });
 
-    res.status(200).json({ success: true, data: { id, ...doc.data(), status } });
+    let invoiceCreated = false;
+    
+    // If status is being set to 'Completed', automatically create an invoice
+    if (status === 'Completed') {
+      console.log(`Appointment ${id} marked as completed. Checking for existing invoice...`);
+      
+      // Check if invoice already exists for this appointment
+      const existingInvoiceQuery = await db.collection('invoices')
+        .where('appointmentId', '==', id)
+        .get();
+      
+      if (existingInvoiceQuery.empty) {
+        console.log(`No existing invoice found. Creating new invoice for appointment ${id}...`);
+        
+        // Create a new invoice for the completed appointment
+        const invoiceData = {
+          appointmentId: id,
+          patientId: appointmentData.patientId,
+          items: [
+            {
+              description: `${appointmentData.type || 'Consultation'} - ${appointmentData.reasonForVisit || 'Medical consultation'}`,
+              quantity: 1,
+              unitPrice: 150.00, // Default consultation fee
+              amount: 150.00
+            }
+          ],
+          subtotal: 150.00,
+          tax: 15.00,
+          totalAmount: 165.00,
+          status: 'Pending',
+          invoiceDate: new Date().toISOString(),
+          dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days from now
+          createdAt: new Date().toISOString()
+        };
+
+        const invoiceRef = await db.collection('invoices').add(invoiceData);
+        invoiceCreated = true;
+        console.log(`Invoice ${invoiceRef.id} created successfully for appointment ${id}`);
+      } else {
+        console.log(`Invoice already exists for appointment ${id}`);
+      }
+    }
+
+    const message = status === 'Completed' && invoiceCreated 
+      ? 'Appointment marked as completed and invoice generated successfully!'
+      : `Appointment status updated to ${status}`;
+
+    res.status(200).json({ 
+      success: true, 
+      message,
+      data: { id, ...appointmentData, status } 
+    });
   } catch (error) {
+    console.error('Error updating appointment status:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };

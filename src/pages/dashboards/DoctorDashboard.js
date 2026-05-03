@@ -12,6 +12,7 @@ const DoctorDashboard = () => {
   const [doctorProfile, setDoctorProfile] = useState(null);
   const [doctorName, setDoctorName] = useState('');
   const [appointments, setAppointments] = useState([]);
+  const [patients, setPatients] = useState([]);
   const [stats, setStats] = useState({ today: 0, pending: 0, totalPatients: 0 });
 
   // Onboarding State
@@ -39,6 +40,27 @@ const DoctorDashboard = () => {
           // 2. Fetch Appointments for this Doctor
           const apptRes = await api.get(`/appointments?doctorId=${myProfile.id}`);
           const myAppts = apptRes.data.data;
+
+          // 3. Fetch all patients to map patient IDs to names
+          const patientsRes = await api.get('/patients');
+          const patientsList = patientsRes.data.data;
+          
+          // Create a map of patient names by fetching user data
+          const patientsWithNames = await Promise.all(
+            patientsList.map(async (patient) => {
+              try {
+                const userRes = await api.get(`/users/${patient.userId}`);
+                return {
+                  id: patient.id,
+                  name: `${userRes.data.data.firstName} ${userRes.data.data.lastName}`
+                };
+              } catch (err) {
+                return { id: patient.id, name: 'Unknown Patient' };
+              }
+            })
+          );
+          
+          setPatients(patientsWithNames);
 
           // Filter for "Today" - only active appointments (Scheduled or Confirmed)
           const todayStr = new Date().toISOString().split('T')[0];
@@ -177,19 +199,23 @@ const DoctorDashboard = () => {
             {appointments.length === 0 ? (
               <p style={{ padding: '20px', color: '#666' }}>No appointments scheduled for today.</p>
             ) : (
-              appointments.map(apt => (
-                <div key={apt.id} className="appointment-item">
-                  <div className="appointment-info">
-                    {/* We show Patient ID for now, usually you'd fetch the name */}
-                    <h4>Patient ID: {apt.patientId.substring(0, 8)}...</h4>
-                    <p>{apt.type}</p>
+              appointments.map(apt => {
+                const patient = patients.find(p => p.id === apt.patientId);
+                const patientName = patient ? patient.name : 'Unknown Patient';
+                
+                return (
+                  <div key={apt.id} className="appointment-item">
+                    <div className="appointment-info">
+                      <h4>{patientName}</h4>
+                      <p>{apt.type}</p>
+                    </div>
+                    <div className="appointment-details">
+                      <span className="time">{apt.appointmentTime}</span>
+                      <span className={`status status-${apt.status.toLowerCase()}`}>{apt.status}</span>
+                    </div>
                   </div>
-                  <div className="appointment-details">
-                    <span className="time">{apt.appointmentTime}</span>
-                    <span className={`status status-${apt.status.toLowerCase()}`}>{apt.status}</span>
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </Card>

@@ -13,6 +13,7 @@ const PatientDashboard = () => {
   const [patientProfile, setPatientProfile] = useState(null); // Medical Data (Blood type, etc.)
   const [appointments, setAppointments] = useState([]);
   const [prescriptions, setPrescriptions] = useState([]);
+  const [doctors, setDoctors] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // 2. Fetch Data
@@ -40,6 +41,10 @@ const PatientDashboard = () => {
             // D. Fetch Prescriptions for this Patient
             const rxRes = await api.get(`/prescriptions?patientId=${myProfile.id}`);
             setPrescriptions(rxRes.data.data);
+
+            // E. Fetch All Doctors (to map doctor IDs to names)
+            const doctorsRes = await api.get('/doctors');
+            setDoctors(doctorsRes.data.data);
           }
         }
       } catch (error) {
@@ -173,18 +178,23 @@ const PatientDashboard = () => {
             {appointments.length === 0 ? (
                 <p style={{ padding: '1rem', color: '#666' }}>No upcoming appointments.</p>
             ) : (
-                appointments.map(apt => (
-                <div key={apt.id} className="appointment-item">
-                    <div className="appointment-info">
-                    <h4>Doctor ID: {apt.doctorId.substring(0, 8)}...</h4> 
-                    <p>{apt.type}</p>
+                appointments.map(apt => {
+                    const doctor = doctors.find(d => d.id === apt.doctorId);
+                    const doctorName = doctor ? `Dr. ${doctor.name || doctor.lastName}` : 'Doctor';
+                    
+                    return (
+                    <div key={apt.id} className="appointment-item">
+                        <div className="appointment-info">
+                        <h4>{doctorName}</h4> 
+                        <p>{apt.type}</p>
+                        </div>
+                        <div className="appointment-datetime">
+                        <span className="date">{new Date(apt.appointmentDate).toLocaleDateString()}</span>
+                        <span className="time">{apt.appointmentTime}</span>
+                        </div>
                     </div>
-                    <div className="appointment-datetime">
-                    <span className="date">{new Date(apt.appointmentDate).toLocaleDateString()}</span>
-                    <span className="time">{apt.appointmentTime}</span>
-                    </div>
-                </div>
-                ))
+                    );
+                })
             )}
           </div>
         </Card>

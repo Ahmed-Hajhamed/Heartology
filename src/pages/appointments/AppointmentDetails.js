@@ -616,7 +616,7 @@ const AppointmentDetails = () => {
             </>
           )}
 
-          {appointment.status === 'Completed' && (
+          {appointment.status === 'Completed' && userRole !== 'doctor' && (
             <Button onClick={() => navigate(`/billing/invoices`)}>💳 View Invoice</Button>
           )}
         </div>
@@ -823,8 +823,8 @@ const AppointmentDetails = () => {
           )}
         </Card>
 
-        {/* Show Invoice section for Completed appointments */}
-        {appointment.status === 'Completed' && (
+        {/* Show Invoice section for Completed appointments - Hide for doctors */}
+        {appointment.status === 'Completed' && userRole !== 'doctor' && (
           <Card title="💳 Billing">
             <p style={{ marginBottom: '15px' }}>An invoice has been generated for this appointment.</p>
             <Button onClick={() => navigate('/billing/invoices')}>View Invoice</Button>

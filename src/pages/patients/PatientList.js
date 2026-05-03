@@ -99,7 +99,7 @@ const PatientList = () => {
       <div className="page-header">
         <h1>Patient Management</h1>
         {/* Only Staff/Admins usually add new patients manually */}
-        <Button onClick={() => navigate('/register')}>Add New Patient</Button>
+        {/* <Button onClick={() => navigate('/register')}>Add New Patient</Button> */}
       </div>
 
       <Card>

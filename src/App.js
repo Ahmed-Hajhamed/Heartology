@@ -120,11 +120,11 @@ function App() {
           <Route path="/prescriptions/create" element={<ProtectedRoute allowedRoles={['doctor']}><CreatePrescription /></ProtectedRoute>} />
           <Route path="/prescriptions/:prescriptionId" element={<ProtectedRoute><PrescriptionDetails /></ProtectedRoute>} />
 
-          {/* Billing */}
-          <Route path="/billing/invoices" element={<ProtectedRoute><InvoiceList /></ProtectedRoute>} />
+          {/* Billing - Doctors are excluded from billing access */}
+          <Route path="/billing/invoices" element={<ProtectedRoute allowedRoles={['admin', 'staff', 'patient']}><InvoiceList /></ProtectedRoute>} />
           <Route path="/billing/invoices/create" element={<ProtectedRoute allowedRoles={['admin', 'staff']}><CreateInvoice /></ProtectedRoute>} />
-          <Route path="/billing/invoices/:invoiceId" element={<ProtectedRoute><InvoiceDetails /></ProtectedRoute>} />
-          <Route path="/billing/payment/:invoiceId" element={<ProtectedRoute><PaymentProcessing /></ProtectedRoute>} />
+          <Route path="/billing/invoices/:invoiceId" element={<ProtectedRoute allowedRoles={['admin', 'staff', 'patient']}><InvoiceDetails /></ProtectedRoute>} />
+          <Route path="/billing/payment/:invoiceId" element={<ProtectedRoute allowedRoles={['admin', 'staff', 'patient']}><PaymentProcessing /></ProtectedRoute>} />
 
           {/* Tools */}
           <Route path="/icd10" element={<ProtectedRoute><Icd10Lookup /></ProtectedRoute>} />

@@ -142,7 +142,15 @@ const updateRadiologyOrderOnPayment = async (appointmentId) => {
 // @access  Private (Admin/Staff)
 const getInvoices = async (req, res) => {
     try {
-        const snapshot = await db.collection('invoices').get();
+        const { patientId } = req.query;
+        
+        // Filter by patientId if provided (for patient role)
+        let query = db.collection('invoices');
+        if (patientId) {
+            query = query.where('patientId', '==', patientId);
+        }
+        
+        const snapshot = await query.get();
         const invoices = [];
 
         for (const doc of snapshot.docs) {
